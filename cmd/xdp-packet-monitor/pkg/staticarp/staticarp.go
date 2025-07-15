@@ -29,8 +29,7 @@ func NewEndpoint(lower stack.LinkEndpoint, s *stack.Stack, nicID tcpip.NICID) *E
 }
 
 func (e *Endpoint) DeliverNetworkPacket(protocol tcpip.NetworkProtocolNumber, pkt *stack.PacketBuffer) {
-	buf := pkt.ToBuffer()
-	clone := stack.NewPacketBuffer(stack.PacketBufferOptions{Payload: buf})
+	clone := pkt.CloneToInbound()
 	defer clone.DecRef()
 
 	clone.LinkHeader().Consume(header.EthernetMinimumSize)
@@ -38,6 +37,10 @@ func (e *Endpoint) DeliverNetworkPacket(protocol tcpip.NetworkProtocolNumber, pk
 
 	eth := header.Ethernet(clone.LinkHeader().Slice())
 	ipv4 := header.IPv4(clone.NetworkHeader().Slice())
+
+	// TODO:
+	// - consider rewriting the MAC address with the next hop address. it works
+	// fine but it won't look like spoofing if we fix it.
 
 	err := e.s.AddStaticNeighbor(e.nicID, protocol, ipv4.SourceAddress(), eth.SourceAddress())
 	if err != nil {

@@ -3,22 +3,19 @@ package main
 import (
 	"context"
 	"flag"
-	"fmt"
 	"log"
 	"net"
 	"net/http"
 	"os/signal"
 	"strings"
 	"syscall"
+	"xdp-packet-monitor/pkg/redirect"
 	"xdp-packet-monitor/pkg/staticarp"
 
-	"github.com/cilium/ebpf"
-	"github.com/cilium/ebpf/link"
 	"golang.org/x/sys/unix"
 
 	"gvisor.dev/gvisor/pkg/tcpip"
 	"gvisor.dev/gvisor/pkg/tcpip/adapters/gonet"
-	"gvisor.dev/gvisor/pkg/tcpip/link/sniffer"
 	"gvisor.dev/gvisor/pkg/tcpip/link/xdp"
 	"gvisor.dev/gvisor/pkg/tcpip/network/arp"
 	"gvisor.dev/gvisor/pkg/tcpip/network/ipv4"
@@ -28,9 +25,8 @@ import (
 )
 
 func main() {
-	var ifaceName, ebpfPath, ipAddr string
+	var ifaceName, ipAddr string
 	flag.StringVar(&ifaceName, "interface", "", "Network interface name to bind AF_XDP socket to")
-	flag.StringVar(&ebpfPath, "ebpf-prog", "", "Path to eBPF program")
 	flag.StringVar(&ipAddr, "ip", "", "IP address with prefix (e.g., 192.168.1.100/24)")
 	flag.Parse()
 
@@ -73,31 +69,11 @@ func main() {
 		log.Fatalf("Failed to create AF_XDP socket: %v", err)
 	}
 
-	spec, err := ebpf.LoadCollectionSpec(ebpfPath)
+	cleanup, err := redirect.LoadAndAttach(sockfd, iface)
 	if err != nil {
-		log.Fatalf("Failed to load collection spec: %v", err)
-	}
-
-	var objects struct {
-		Program *ebpf.Program `ebpf:"xdp_redirect_prog"`
-		SockMap *ebpf.Map     `ebpf:"xsks_map"`
-	}
-	if err := spec.LoadAndAssign(&objects, nil); err != nil {
-		log.Fatalf("Failed to load and assign: %v", err)
-	}
-
-	_, cleanup, err := attach(objects.Program, iface)
-	if err != nil {
-		log.Fatalf("Failed to attach program: %v", err)
+		log.Fatalf("Failed to load and attach eBPF program: %v", err)
 	}
 	defer cleanup()
-
-	key := uint32(0)
-	val := uint32(sockfd)
-	err = objects.SockMap.Update(&key, &val, 0 /* flags */)
-	if err != nil {
-		log.Fatalf("Failed to update map: %v", err)
-	}
 
 	addr, err := tcpip.ParseMACAddress(iface.HardwareAddr.String())
 	if err != nil {
@@ -106,28 +82,29 @@ func main() {
 
 	// Create XDP link endpoint
 	le, err := xdp.New(&xdp.Options{
-		FD:             sockfd,
-		Address:        addr,
-		Bind:           true,
-		InterfaceIndex: iface.Index,
+		FD:                sockfd,
+		Address:           addr,
+		Bind:              true,
+		InterfaceIndex:    iface.Index,
+		RXChecksumOffload: true,
 	})
 	if err != nil {
 		log.Fatalf("Failed to create XDP link endpoint: %v", err)
 	}
 
-	// Create sniffer and enable packet logging
-	sn := sniffer.New(le)
-	sniffer.LogPackets.Store(1)
-
 	// Create network stack
 	s := stack.New(stack.Options{
 		NetworkProtocols:   []stack.NetworkProtocolFactory{ipv4.NewProtocol, arp.NewProtocol},
 		TransportProtocols: []stack.TransportProtocolFactory{tcp.NewProtocol},
+		HandleLocal:        true,
 	})
 
 	nicID := tcpip.NICID(1)
 
-	sarp := staticarp.NewEndpoint(sn, s, nicID)
+	sarp := staticarp.NewEndpoint(le, s, nicID)
+	// Create sniffer and enable packet logging
+	// sn := sniffer.New(sarp)
+	// sniffer.LogPackets.Store(1)
 
 	// Create and enable NIC
 	if err := s.CreateNIC(nicID, sarp); err != nil {
@@ -136,6 +113,8 @@ func main() {
 	if err := s.EnableNIC(nicID); err != nil {
 		log.Fatalf("Failed to enable NIC: %v", err)
 	}
+	// s.SetPromiscuousMode(nicID, true)
+	// s.SetSpoofing(nicID, true)
 
 	// Add protocol address to the NIC
 	var protocol tcpip.NetworkProtocolNumber
@@ -165,7 +144,7 @@ func main() {
 	}
 	s.SetRouteTable([]tcpip.Route{route})
 
-	listener, err := gonet.ListenTCP(s, tcpip.FullAddress{Port: uint16(80)}, protocol)
+	listener, err := gonet.ListenTCP(s, tcpip.FullAddress{Addr: addrWithPrefix.Address, Port: uint16(80)}, protocol)
 	if err != nil {
 		log.Fatalf("Failed to listen on TCP port 80: %v", err)
 	}
@@ -202,36 +181,4 @@ func main() {
 	}
 
 	log.Printf("XDP packet monitor stopped")
-}
-
-func attach(program *ebpf.Program, iface *net.Interface) (link.Link, func(), error) {
-	// Attach the program to the XDP hook on the device. Fallback from best
-	// to worst mode.
-	modes := []struct {
-		name string
-		flag link.XDPAttachFlags
-	}{
-		{name: "offload", flag: link.XDPOffloadMode},
-		{name: "driver", flag: link.XDPDriverMode},
-		{name: "generic", flag: link.XDPGenericMode},
-	}
-	var attached link.Link
-	var err error
-	for _, mode := range modes {
-		attached, err = link.AttachXDP(link.XDPOptions{
-			Program:   program,
-			Interface: iface.Index,
-			Flags:     mode.flag,
-		})
-		if err == nil {
-			log.Printf("attached with mode %q", mode.name)
-			break
-		}
-		log.Printf("failed to attach with mode %q: %v", mode.name, err)
-	}
-	if attached == nil {
-		// TODO: this doesn't actually seem to fail if the program is already attached
-		return nil, nil, fmt.Errorf("failed to attach program")
-	}
-	return attached, func() { attached.Close() }, nil
 }
