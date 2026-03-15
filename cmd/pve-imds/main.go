@@ -132,14 +132,20 @@ func (s *loggingEventSink) HandleLinkEvent(ctx context.Context, ev tapwatch.Even
 // registerWatcher wires the Watcher into the fx lifecycle: Run starts on
 // OnStart and is stopped by cancelling its context on OnStop.
 func registerWatcher(lc fx.Lifecycle, w *tapwatch.Watcher, sink tapwatch.EventSink, log *slog.Logger) {
+	ctx, cancel := context.WithCancel(context.Background())
 	lc.Append(fx.Hook{
-		OnStart: func(ctx context.Context) error {
+		OnStart: func(_ context.Context) error {
 			log.Info("starting tap interface watcher")
 			go func() {
 				if err := w.Run(ctx, sink); err != nil {
 					log.Error("tap watcher exited", "err", err)
 				}
 			}()
+			return nil
+		},
+		OnStop: func(_ context.Context) error {
+			log.Info("stopping tap interface watcher")
+			cancel()
 			return nil
 		},
 	})

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/base64"
 	"io"
+	"log/slog"
 	"os"
 	"testing"
 
@@ -71,7 +72,7 @@ func runWatcher(msgs []netlink.Message, wantCount int) []Event {
 		return []netlink.Message{msg}, nil
 	})
 
-	w := New(conn)
+	w := New(conn, slog.Default())
 
 	sink := &collectingSink{wantCount: wantCount, cancel: cancel}
 	done := make(chan struct{})

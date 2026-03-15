@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"log/slog"
 
 	"github.com/mdlayher/netlink"
 )
@@ -53,13 +54,15 @@ type ifKey struct {
 type Watcher struct {
 	conn *netlink.Conn
 	seen map[ifKey]struct{} // keys for which Created has been emitted
+	log  *slog.Logger
 }
 
 // New creates a Watcher that reads from conn.
-func New(conn *netlink.Conn) *Watcher {
+func New(conn *netlink.Conn, log *slog.Logger) *Watcher {
 	return &Watcher{
 		conn: conn,
 		seen: make(map[ifKey]struct{}),
+		log:  log,
 	}
 }
 
@@ -88,9 +91,13 @@ func (w *Watcher) Run(ctx context.Context, sink EventSink) error {
 			}
 			return err
 		}
+		w.log.DebugContext(ctx, "received netlink messages", "count", len(msgs))
 		for _, msg := range msgs {
 			if ev, ok := w.process(msg); ok {
+				w.log.DebugContext(ctx, "emitting event", "event", ev.Type, "name", ev.Name, "index", ev.Index)
 				sink.HandleLinkEvent(ctx, ev)
+			} else {
+				w.log.DebugContext(ctx, "skipping message", "type", msg.Header.Type)
 			}
 		}
 	}
