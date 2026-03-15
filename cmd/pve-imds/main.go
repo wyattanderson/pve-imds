@@ -1,12 +1,9 @@
 package main
 
 import (
-	"context"
 	"fmt"
-	"log/slog"
 	"os"
 
-	"github.com/mdlayher/netlink"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"go.uber.org/fx"
@@ -91,53 +88,15 @@ func runServe(fxLogging bool) error {
 		fx.Supply(cfg),
 		fx.Supply(logger),
 		fxLogger,
-		fx.Provide(newNetlinkConn),
+		fx.Provide(tapwatch.NewNetlinkConn),
 		fx.Provide(tapwatch.New),
 		fx.Provide(iface.NewFactory),
 		fx.Provide(manager.New),
 		fx.Provide(func(m *manager.Manager) tapwatch.EventSink { return m }),
 		fx.Invoke(manager.Register),
-		fx.Invoke(registerWatcher),
+		fx.Invoke(tapwatch.Register),
 	)
 
 	app.Run()
 	return nil
-}
-
-// newNetlinkConn opens a NETLINK_ROUTE socket subscribed to RTNLGRP_LINK.
-func newNetlinkConn() (*netlink.Conn, error) {
-	conn, err := netlink.Dial(0, nil) // 0 = NETLINK_ROUTE
-	if err != nil {
-		return nil, fmt.Errorf("dial netlink: %w", err)
-	}
-	if err := conn.JoinGroup(1); err != nil { // 1 = RTNLGRP_LINK
-		conn.Close()
-		return nil, fmt.Errorf("join RTNLGRP_LINK: %w", err)
-	}
-	return conn, nil
-}
-
-// registerWatcher wires the Watcher into the fx lifecycle: Run starts on
-// OnStart and is stopped by cancelling its context on OnStop.
-func registerWatcher(lc fx.Lifecycle, w *tapwatch.Watcher, sink tapwatch.EventSink, log *slog.Logger) {
-	ctx, cancel := context.WithCancel(context.Background())
-	lc.Append(fx.Hook{
-		OnStart: func(_ context.Context) error {
-			log.Info("starting tap interface watcher")
-			if err := w.Scan(ctx, sink); err != nil {
-				return fmt.Errorf("initial interface scan: %w", err)
-			}
-			go func() {
-				if err := w.Run(ctx, sink); err != nil {
-					log.Error("tap watcher exited", "err", err)
-				}
-			}()
-			return nil
-		},
-		OnStop: func(_ context.Context) error {
-			log.Info("stopping tap interface watcher")
-			cancel()
-			return nil
-		},
-	})
 }

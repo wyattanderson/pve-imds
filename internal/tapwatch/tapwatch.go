@@ -6,11 +6,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"fmt"
 	"log/slog"
 	"net"
 	"regexp"
 
 	"github.com/mdlayher/netlink"
+	"go.uber.org/fx"
 )
 
 // tapIfaceRe matches Proxmox tap interface names: tap{vmid}i{netindex}.
@@ -137,6 +139,45 @@ func (w *Watcher) Run(ctx context.Context, sink EventSink) error {
 			}
 		}
 	}
+}
+
+// NewNetlinkConn opens a NETLINK_ROUTE socket subscribed to RTNLGRP_LINK.
+func NewNetlinkConn() (*netlink.Conn, error) {
+	conn, err := netlink.Dial(0, nil) // 0 = NETLINK_ROUTE
+	if err != nil {
+		return nil, fmt.Errorf("dial netlink: %w", err)
+	}
+	if err := conn.JoinGroup(1); err != nil { // 1 = RTNLGRP_LINK
+		conn.Close()
+		return nil, fmt.Errorf("join RTNLGRP_LINK: %w", err)
+	}
+	return conn, nil
+}
+
+// Register is an fx.Invoke target that wires the Watcher into the fx lifecycle.
+// Run starts on OnStart and is stopped by cancelling its context on OnStop.
+func Register(lc fx.Lifecycle, w *Watcher, sink EventSink, log *slog.Logger) {
+	ctx, cancel := context.WithCancel(context.Background())
+	lc.Append(fx.Hook{
+		OnStart: func(_ context.Context) error {
+			log.Info("starting tap interface watcher")
+			if err := w.Scan(ctx, sink); err != nil {
+				cancel()
+				return fmt.Errorf("initial interface scan: %w", err)
+			}
+			go func() {
+				if err := w.Run(ctx, sink); err != nil {
+					log.Error("tap watcher exited", "err", err)
+				}
+			}()
+			return nil
+		},
+		OnStop: func(_ context.Context) error {
+			log.Info("stopping tap interface watcher")
+			cancel()
+			return nil
+		},
+	})
 }
 
 // process inspects a single netlink message and returns the corresponding
