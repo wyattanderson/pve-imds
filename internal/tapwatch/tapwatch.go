@@ -75,17 +75,18 @@ func (w *Watcher) Run(ctx context.Context, sink EventSink) error {
 	go func() { <-ctx.Done(); w.conn.Close() }()
 
 	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		default:
+		}
+
 		msgs, err := w.conn.Receive()
 		if err != nil {
 			if ctx.Err() != nil {
 				return nil
 			}
 			return err
-		}
-		// ctx.Err() check handles the nltest fake where Close is a no-op and
-		// Receive returns (nil, nil) indefinitely after messages are exhausted.
-		if ctx.Err() != nil {
-			return nil
 		}
 		for _, msg := range msgs {
 			if ev, ok := w.process(msg); ok {

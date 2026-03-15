@@ -58,8 +58,12 @@ func (s *collectingSink) HandleLinkEvent(_ context.Context, e Event) {
 // for Run to return.
 func runWatcher(msgs []netlink.Message, wantCount int) []Event {
 	i := 0
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	conn := nltest.Dial(func(_ []netlink.Message) ([]netlink.Message, error) {
 		if i >= len(msgs) {
+			cancel()
 			return nil, io.EOF
 		}
 		msg := msgs[i]
@@ -68,8 +72,6 @@ func runWatcher(msgs []netlink.Message, wantCount int) []Event {
 	})
 
 	w := New(conn)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	sink := &collectingSink{wantCount: wantCount, cancel: cancel}
 	done := make(chan struct{})

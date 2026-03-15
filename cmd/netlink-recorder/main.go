@@ -110,6 +110,8 @@ func main() {
 			continue
 		}
 
+		logger.Info("received messages", "count", len(msgs))
+
 		for _, msg := range msgs {
 			ifname, msgType := parseMessage(msg)
 
