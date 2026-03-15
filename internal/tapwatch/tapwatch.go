@@ -63,10 +63,15 @@ func New(conn *netlink.Conn) *Watcher {
 	}
 }
 
+// EventSink receives tap interface lifecycle events.
+type EventSink interface {
+	HandleLinkEvent(context.Context, Event)
+}
+
 // Run reads from the netlink connection until ctx is cancelled, calling
-// handler for each Created or Deleted event. It closes conn when ctx is done
+// sink for each Created or Deleted event. It closes conn when ctx is done
 // so that a blocking Receive unblocks promptly.
-func (w *Watcher) Run(ctx context.Context, handler func(Event)) error {
+func (w *Watcher) Run(ctx context.Context, sink EventSink) error {
 	go func() { <-ctx.Done(); w.conn.Close() }()
 
 	for {
@@ -84,7 +89,7 @@ func (w *Watcher) Run(ctx context.Context, handler func(Event)) error {
 		}
 		for _, msg := range msgs {
 			if ev, ok := w.process(msg); ok {
-				handler(ev)
+				sink.HandleLinkEvent(ctx, ev)
 			}
 		}
 	}

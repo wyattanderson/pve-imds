@@ -38,6 +38,21 @@ func loadCapture(t *testing.T, path string) []netlink.Message {
 	return msgs
 }
 
+// collectingSink is an EventSink that appends events and cancels ctx once
+// wantCount events have been received.
+type collectingSink struct {
+	events    []Event
+	wantCount int
+	cancel    context.CancelFunc
+}
+
+func (s *collectingSink) HandleLinkEvent(_ context.Context, e Event) {
+	s.events = append(s.events, e)
+	if len(s.events) >= s.wantCount {
+		s.cancel()
+	}
+}
+
 // runWatcher drives a Watcher with the given messages and collects events.
 // It cancels the context after wantCount events have been received, then waits
 // for Run to return.
@@ -56,19 +71,14 @@ func runWatcher(msgs []netlink.Message, wantCount int) []Event {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	sink := &collectingSink{wantCount: wantCount, cancel: cancel}
 	done := make(chan struct{})
-	var events []Event
 	go func() {
 		defer close(done)
-		w.Run(ctx, func(e Event) { //nolint:errcheck
-			events = append(events, e)
-			if len(events) >= wantCount {
-				cancel()
-			}
-		})
+		w.Run(ctx, sink) //nolint:errcheck
 	}()
 	<-done
-	return events
+	return sink.events
 }
 
 // TestTwoInstanceLifecycle replays a capture of two VMs booting and shutting
