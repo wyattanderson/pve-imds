@@ -8,12 +8,13 @@ This file provides context for AI assistants working on this codebase.
 
 ## Repository layout
 
-Standard Go multi-binary layout:
-
 ```
 cmd/pve-imds/           # main daemon
 cmd/pve-imds-meta/      # metadata backend (planned)
-internal/               # all shared packages
+cmd/netlink-recorder/   # dev utility: capture RTNLGRP_LINK messages to file
+internal/config/        # Config struct + Viper unmarshaling
+internal/logging/       # slog initialisation helper
+internal/tapwatch/      # tap interface lifecycle watcher (Watcher, EventSink, Scan, Run)
 ```
 
 ## Architectural patterns
@@ -22,6 +23,8 @@ internal/               # all shared packages
 - **DI**: `uber/fx`
 - **Config**: Viper with struct unmarshaling. Config structs in `internal/config/`. Env prefix `PVE_IMDS_`. Layered: config file < env < flags.
 - **Logging**: `slog` via a shared `internal/logging` package. Structured fields everywhere.
+- **Testability via injectable function fields**: When a struct depends on an OS call (e.g. `net.Interfaces`, `os.ReadFile`), store it as an unexported `func` field and default it to the real implementation in the constructor. Tests in the same package override the field directly — no interface wrapping needed. Example: `Watcher.lister func() ([]net.Interface, error)` defaults to `net.Interfaces`.
+- **Startup scan + live watch**: `tapwatch.Watcher.Scan` must be called before `Watcher.Run`. `Scan` enumerates already-up tap interfaces and populates `seen`; `Run` then processes the live netlink stream without re-emitting events for interfaces `Scan` already reported. Wire this in `fx.Hook.OnStart`: call `Scan` synchronously (return any error to abort startup), then launch `Run` in a goroutine.
 
 ## Key dependencies
 

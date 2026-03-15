@@ -38,23 +38,38 @@ The XDP program runs in copy-mode (not zero-copy) for compatibility; zero-copy c
 
 ## Interface lifecycle
 
+At daemon startup, `tapwatch.Watcher.Scan` enumerates existing network interfaces and emits `Created` events for any tap interface that is already up. `Watcher.Run` then takes over and processes the live `RTNLGRP_LINK` netlink stream. Both share the same `seen` map, so `Run` will not re-emit `Created` for interfaces already reported by `Scan`.
+
 ```
-netlink RTM_NEWLINK (tap prefix)
+daemon start
     │
     ▼
-parse vmid + net_index from interface name
+tapwatch.Scan  ──►  net.Interfaces()  ──►  Created event per up tap{vmid}i{n}
     │
     ▼
-lookup VM identity (cache → /proc + /etc/pve/qemu-server/)
+tapwatch.Run (goroutine)
     │
-    ▼
-create AF_XDP socket
-load & attach eBPF program
-register HTTP proxy handler
+    ├── netlink RTM_NEWLINK (tap prefix, UP)
+    │       │
+    │       ▼
+    │   Created event
     │
-    ▼ (running)
-    │
-netlink RTM_DELLINK  ──►  detach XDP, close socket, remove handler
+    └── netlink RTM_DELLINK
+            │
+            ▼
+        Deleted event
+
+Created event  ──►  parse vmid + net_index from interface name
+                        │
+                        ▼
+                    lookup VM identity (cache → /proc + /etc/pve/qemu-server/)
+                        │
+                        ▼
+                    create AF_XDP socket
+                    load & attach eBPF program
+                    register HTTP proxy handler
+
+Deleted event  ──►  detach XDP, close socket, remove handler
 ```
 
 Interface names follow the Proxmox convention `tap{vmid}i{netindex}`. The daemon may also watch `/etc/pve/qemu-server/*.conf` via inotify to detect config changes (e.g., config digest updates) without relying on netlink alone, since Proxmox does not guarantee a generic pre/post-start hook mechanism.
@@ -74,10 +89,21 @@ Resolving the full identity tuple `(node, vmid, qemu_pid, qemu_pid_starttime, ne
 ```
 pve-imds/
 ├── cmd/
-│   ├── pve-imds/           # Main daemon binary
+│   ├── pve-imds/               # Main daemon binary
 │   │   └── main.go
-│   └── pve-imds-meta/      # Metadata backend binary (planned)
+│   ├── pve-imds-meta/          # Metadata backend binary (planned)
+│   │   └── main.go
+│   └── netlink-recorder/       # Dev utility: capture RTNLGRP_LINK messages to file
 │       └── main.go
+├── internal/
+│   ├── config/                 # Config struct + Viper unmarshaling
+│   │   └── config.go
+│   ├── logging/                # slog initialisation helper
+│   │   └── logging.go
+│   └── tapwatch/               # Tap interface lifecycle watcher
+│       ├── tapwatch.go         # Watcher, EventSink, Scan, Run
+│       ├── tapwatch_test.go
+│       └── testdata/           # Base64-encoded netlink capture fixtures
 ├── go.mod
 ├── go.sum
 ├── README.md
@@ -92,7 +118,7 @@ Binaries use [spf13/cobra](https://github.com/spf13/cobra) for subcommand struct
 Typical invocation:
 
 ```sh
-pve-imds serve --socket /run/pve-imds-meta.sock --log-level info
+pve-imds --socket /run/pve-imds-meta.sock --log-level info
 ```
 
 Configuration is layered: config file < environment variables (`PVE_IMDS_*`) < CLI flags.
