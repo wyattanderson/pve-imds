@@ -35,20 +35,22 @@ func NewStaticARPEndpoint(log *slog.Logger, lower stack.LinkEndpoint, s *stack.S
 	return e
 }
 
-// DeliverNetworkPacket learns the source MAC/IP from each incoming packet
+// DeliverNetworkPacket learns the source MAC/IP from each incoming IPv4 packet
 // before passing it up to the network stack.
 func (e *Endpoint) DeliverNetworkPacket(protocol tcpip.NetworkProtocolNumber, pkt *stack.PacketBuffer) {
-	clone := pkt.CloneToInbound()
-	defer clone.DecRef()
+	if protocol == header.IPv4ProtocolNumber {
+		clone := pkt.CloneToInbound()
+		defer clone.DecRef()
 
-	clone.LinkHeader().Consume(header.EthernetMinimumSize)
-	clone.NetworkHeader().Consume(header.IPv4MinimumSize)
+		clone.LinkHeader().Consume(header.EthernetMinimumSize)
+		clone.NetworkHeader().Consume(header.IPv4MinimumSize)
 
-	eth := header.Ethernet(clone.LinkHeader().Slice())
-	ipv4h := header.IPv4(clone.NetworkHeader().Slice())
+		eth := header.Ethernet(clone.LinkHeader().Slice())
+		ipv4h := header.IPv4(clone.NetworkHeader().Slice())
 
-	if err := e.s.AddStaticNeighbor(e.nicID, protocol, ipv4h.SourceAddress(), eth.SourceAddress()); err != nil {
-		e.log.Warn("failed to add static neighbor", "err", err)
+		if err := e.s.AddStaticNeighbor(e.nicID, protocol, ipv4h.SourceAddress(), eth.SourceAddress()); err != nil {
+			e.log.Warn("failed to add static neighbor", "err", err)
+		}
 	}
 	e.Endpoint.DeliverNetworkPacket(protocol, pkt)
 }
