@@ -1,6 +1,6 @@
 //go:build linux
 
-package xdp
+package iface
 
 import (
 	"log/slog"

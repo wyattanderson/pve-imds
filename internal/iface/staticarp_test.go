@@ -1,17 +1,15 @@
 //go:build linux
 
-package xdp
+package iface
 
 import (
 	"log/slog"
-	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"gvisor.dev/gvisor/pkg/buffer"
-	"gvisor.dev/gvisor/pkg/refs"
 	"gvisor.dev/gvisor/pkg/tcpip"
 	"gvisor.dev/gvisor/pkg/tcpip/header"
 	"gvisor.dev/gvisor/pkg/tcpip/link/ethernet"
@@ -21,13 +19,6 @@ import (
 	"gvisor.dev/gvisor/pkg/tcpip/stack"
 	"gvisor.dev/gvisor/pkg/tcpip/transport/tcp"
 )
-
-func TestMain(m *testing.M) {
-	refs.SetLeakMode(refs.LeaksPanic)
-	code := m.Run()
-	refs.DoLeakCheck()
-	os.Exit(code)
-}
 
 func TestStaticARPEndpoint_LearnNeighbor(t *testing.T) {
 	ep1, _ := veth.NewPair(1500, veth.DefaultBacklogSize)

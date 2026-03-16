@@ -19,8 +19,6 @@ import (
 	"gvisor.dev/gvisor/pkg/tcpip/network/ipv4"
 	"gvisor.dev/gvisor/pkg/tcpip/stack"
 	"gvisor.dev/gvisor/pkg/tcpip/transport/tcp"
-
-	"github.com/wyattanderson/pve-imds/internal/xdp"
 )
 
 var imdsAddr = tcpip.AddrFrom4([4]byte{169, 254, 169, 254})
@@ -37,7 +35,7 @@ func newIMDSStack(log *slog.Logger, le stack.LinkEndpoint) (*stack.Stack, error)
 
 	const nicID = tcpip.NICID(1)
 
-	if tcpipErr := s.CreateNIC(nicID, xdp.NewStaticARPEndpoint(log, le, s, nicID)); tcpipErr != nil {
+	if tcpipErr := s.CreateNIC(nicID, NewStaticARPEndpoint(log, le, s, nicID)); tcpipErr != nil {
 		s.Close()
 		return nil, fmt.Errorf("create NIC: %v", tcpipErr)
 	}
