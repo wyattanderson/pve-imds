@@ -4,6 +4,7 @@ go 1.25.0
 
 require (
 	github.com/cilium/ebpf v0.12.3
+	github.com/fsnotify/fsnotify v1.9.0
 	github.com/mdlayher/netlink v1.9.0
 	github.com/spf13/afero v1.15.0
 	github.com/spf13/cobra v1.10.2
@@ -17,7 +18,6 @@ require (
 
 require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
-	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/go-viper/mapstructure/v2 v2.4.0 // indirect
 	github.com/google/btree v1.1.2 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect

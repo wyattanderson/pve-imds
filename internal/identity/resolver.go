@@ -3,11 +3,13 @@ package identity
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
 	"os"
 	"regexp"
+	"slices"
 	"strconv"
 	"sync"
 
@@ -174,7 +176,14 @@ func (r *Resolver) populate(ctx context.Context, ifname string, ifindex int32) e
 
 	proc, err := r.tracker.Lookup(vmid)
 	if err != nil {
-		return fmt.Errorf("lookup process: %w", err)
+		if !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("lookup process: %w", err)
+		}
+		// PID file not yet written — PVE creates it after QEMU starts and the
+		// tap interface is already up. Store a zero ProcessInfo; the file
+		// watcher will call ReloadProcess once the PID file appears.
+		r.log.DebugContext(ctx, "identity: pid file not yet present, will update on inotify event",
+			"ifname", ifname, "vmid", vmid)
 	}
 
 	r.log.DebugContext(ctx, "identity: populating cache entry",
@@ -205,6 +214,17 @@ func (r *Resolver) invalidate(ifname string) {
 	r.log.Debug("identity: evicting cache entry", "ifname", ifname, "vmid", e.vmid)
 	delete(r.entries, ifname)
 	r.removeIfname(e.vmid, ifname)
+}
+
+// invalidateByVMID evicts all cache entries for vmid. Called by the file
+// watcher when a config file is removed (VM deleted or decommissioned).
+func (r *Resolver) invalidateByVMID(vmid int) {
+	r.mu.RLock()
+	ifnames := slices.Clone(r.vmidToIfnames[vmid])
+	r.mu.RUnlock()
+	for _, ifname := range ifnames {
+		r.invalidate(ifname)
+	}
 }
 
 // parseIfname extracts vmid and netIndex from a tap interface name of the form
