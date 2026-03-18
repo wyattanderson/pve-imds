@@ -16,7 +16,7 @@
 │  └────────────┘              │  add identity headers     │  │
 │                              │         │                 │  │
 │                              └─────────┼─────────────────┘  │
-│                                        │ Unix socket         │
+│                                        │ Unix socket        │
 │                              ┌─────────▼─────────────────┐  │
 │                              │  pve-imds-meta (unpriv.)  │  │
 │                              │                           │  │
@@ -35,6 +35,23 @@
 5. The response is returned through the same path.
 
 The XDP program runs in copy-mode (not zero-copy) for compatibility; zero-copy can be enabled where the driver supports it.
+
+## ARP and MAC address handling
+
+Guest VMs reach `169.254.169.254` via one of two paths, each with different ethernet framing:
+
+**Direct ARP path**: The VM ARPs for `169.254.169.254` on the link. The gvisor netstack replies with the tap interface's hardware MAC address. Subsequent data frames arrive with `dst=tap_MAC`.
+
+**Default-gateway path**: The VM's routing table sends packets for non-local destinations through a default gateway. The ethernet frame then carries `dst=gateway_MAC`, not the tap interface's MAC. This is the common case when the guest has not manually configured a route for the link-local range.
+
+In both cases, the VM accepts reply frames only if their ethernet source address matches what the VM placed in the destination — `tap_MAC` for the ARP path, `gateway_MAC` for the gateway path.
+
+`internal/iface.Endpoint` (a `nested.LinkEndpoint` wrapper) handles this uniformly:
+
+- **Inbound**: `DeliverNetworkPacket` extracts the ethernet destination MAC from each arriving IPv4 frame and stores it atomically as `preferredSrcMAC`. Multicast and broadcast addresses (e.g. the `FF:FF:FF:FF:FF:FF` destination of ARP requests) are ignored.
+- **Outbound**: `AddHeader` overwrites `pkt.EgressRoute.LocalLinkAddress` with `preferredSrcMAC` before delegating to the child endpoint to encode the ethernet frame. If no unicast inbound frame has been seen yet (e.g. the very first outbound frame is an ARP reply), the field is left unchanged and gvisor uses the tap interface's own MAC, which is correct for ARP replies.
+
+The first unicast data frame from the VM — whether sourced via ARP or a gateway — establishes `preferredSrcMAC` for the lifetime of that interface's runtime.
 
 ## Interface lifecycle
 
@@ -92,18 +109,22 @@ pve-imds/
 │   ├── pve-imds/               # Main daemon binary
 │   │   └── main.go
 │   ├── pve-imds-meta/          # Metadata backend binary (planned)
-│   │   └── main.go
 │   └── netlink-recorder/       # Dev utility: capture RTNLGRP_LINK messages to file
 │       └── main.go
 ├── internal/
 │   ├── config/                 # Config struct + Viper unmarshaling
-│   │   └── config.go
+│   ├── iface/                  # Per-interface gvisor stack + HTTP server
+│   │   ├── iface.go            # Runtime: AF_XDP socket, stack wiring, HTTP handler
+│   │   ├── stack.go            # newIMDSStack, serveIMDS
+│   │   ├── staticarp.go        # Endpoint: static neighbor learning + MAC rewriting
+│   │   └── *_test.go
+│   ├── identity/               # VM identity resolution and caching
 │   ├── logging/                # slog initialisation helper
-│   │   └── logging.go
-│   └── tapwatch/               # Tap interface lifecycle watcher
-│       ├── tapwatch.go         # Watcher, EventSink, Scan, Run
-│       ├── tapwatch_test.go
-│       └── testdata/           # Base64-encoded netlink capture fixtures
+│   ├── manager/                # Interface lifecycle manager
+│   ├── tapwatch/               # Tap interface lifecycle watcher (netlink)
+│   ├── vmconfig/               # Proxmox VM config parsing
+│   ├── vmproc/                 # /proc-based PID and starttime lookup
+│   └── xdp/                    # eBPF program + bpf2go bindings
 ├── go.mod
 ├── go.sum
 ├── README.md
