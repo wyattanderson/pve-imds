@@ -14,6 +14,7 @@ package identity
 
 import (
 	"errors"
+	"net"
 
 	"github.com/wyattanderson/pve-imds/internal/vmconfig"
 	"github.com/wyattanderson/pve-imds/internal/vmproc"
@@ -41,6 +42,13 @@ type VMRecord struct {
 
 	// ProcessInfo is the (PID, StartTime) pair of the QEMU process.
 	ProcessInfo vmproc.ProcessInfo
+}
+
+// Provider is the interface consumed by the HTTP proxy layer to resolve VM
+// identity. Depending on this interface (rather than *Resolver directly) lets
+// proxy tests inject a fake without importing the full identity package.
+type Provider interface {
+	Lookup(ifname string, ifindex int32, srcMAC net.HardwareAddr) (*VMRecord, error)
 }
 
 // Sentinel errors returned by Resolver.Lookup. Callers should use errors.Is.

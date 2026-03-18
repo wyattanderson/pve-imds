@@ -10,6 +10,7 @@ import (
 	"go.uber.org/fx/fxevent"
 
 	"github.com/wyattanderson/pve-imds/internal/config"
+	"github.com/wyattanderson/pve-imds/internal/identity"
 	"github.com/wyattanderson/pve-imds/internal/iface"
 	"github.com/wyattanderson/pve-imds/internal/logging"
 	"github.com/wyattanderson/pve-imds/internal/manager"
@@ -92,8 +93,13 @@ func runServe(fxLogging bool) error {
 		fx.Provide(tapwatch.New),
 		fx.Provide(iface.NewFactory),
 		fx.Provide(manager.New),
-		fx.Provide(func(m *manager.Manager) tapwatch.EventSink { return m }),
+		// Contribute manager to the event_sinks value group.
+		fx.Provide(fx.Annotate(
+			func(m *manager.Manager) tapwatch.EventSink { return m },
+			fx.ResultTags(`group:"event_sinks"`),
+		)),
 		fx.Invoke(manager.Register),
+		identity.Module,
 		fx.Invoke(tapwatch.Register),
 	)
 

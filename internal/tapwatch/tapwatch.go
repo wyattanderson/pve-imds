@@ -109,6 +109,17 @@ type EventSink interface {
 	HandleLinkEvent(context.Context, Event)
 }
 
+// MultiSink fans out a single HandleLinkEvent call to all registered sinks in
+// the order they appear in the slice. Use it when multiple consumers need the
+// same tap interface lifecycle events.
+type MultiSink []EventSink
+
+func (ms MultiSink) HandleLinkEvent(ctx context.Context, ev Event) {
+	for _, s := range ms {
+		s.HandleLinkEvent(ctx, ev)
+	}
+}
+
 // Run reads from the netlink connection until ctx is cancelled, calling
 // sink for each Created or Deleted event. It closes conn when ctx is done
 // so that a blocking Receive unblocks promptly.
@@ -153,26 +164,39 @@ func NewNetlinkConn() (*netlink.Conn, error) {
 	return conn, nil
 }
 
+// RegisterParams are the dependencies for Register. Sinks are collected from
+// all providers that contribute to the "event_sinks" value group, so any
+// package can register a new EventSink without touching this call site.
+type RegisterParams struct {
+	fx.In
+
+	LC      fx.Lifecycle
+	Watcher *Watcher
+	Sinks   []EventSink `group:"event_sinks"`
+	Log     *slog.Logger
+}
+
 // Register is an fx.Invoke target that wires the Watcher into the fx lifecycle.
-// Run starts on OnStart and is stopped by cancelling its context on OnStop.
-func Register(lc fx.Lifecycle, w *Watcher, sink EventSink, log *slog.Logger) {
+// It builds a MultiSink from all registered EventSinks and runs Scan + Run.
+func Register(p RegisterParams) {
+	sink := MultiSink(p.Sinks)
 	ctx, cancel := context.WithCancel(context.Background())
-	lc.Append(fx.Hook{
+	p.LC.Append(fx.Hook{
 		OnStart: func(_ context.Context) error {
-			log.Info("starting tap interface watcher")
-			if err := w.Scan(ctx, sink); err != nil {
+			p.Log.Info("starting tap interface watcher")
+			if err := p.Watcher.Scan(ctx, sink); err != nil {
 				cancel()
 				return fmt.Errorf("initial interface scan: %w", err)
 			}
 			go func() {
-				if err := w.Run(ctx, sink); err != nil {
-					log.Error("tap watcher exited", "err", err)
+				if err := p.Watcher.Run(ctx, sink); err != nil {
+					p.Log.Error("tap watcher exited", "err", err)
 				}
 			}()
 			return nil
 		},
 		OnStop: func(_ context.Context) error {
-			log.Info("stopping tap interface watcher")
+			p.Log.Info("stopping tap interface watcher")
 			cancel()
 			return nil
 		},

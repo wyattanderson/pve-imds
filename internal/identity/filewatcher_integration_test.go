@@ -166,9 +166,9 @@ func TestIntegrationPIDRemoveNoAction(t *testing.T) {
 
 	require.NoError(t, os.Remove(path))
 
-	// Give the watcher time to process any spurious events, then assert no
-	// invalidation occurred.
-	time.Sleep(200 * time.Millisecond)
+	// Give the watcher time to process any spurious events (including the
+	// debounce window) then assert no invalidation occurred.
+	time.Sleep(400 * time.Millisecond)
 	spy.mu.Lock()
 	assert.NotContains(t, spy.invalidatedVMIDs, vmid, "pid Remove must not trigger invalidation")
 	spy.mu.Unlock()

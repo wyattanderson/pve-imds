@@ -7,13 +7,16 @@ import (
 	"path/filepath"
 	"regexp"
 	"strconv"
+	"sync"
+	"time"
 
 	"github.com/fsnotify/fsnotify"
 )
 
 const (
-	defaultConfDir = "/etc/pve/qemu-server"
-	defaultPIDDir  = "/var/run/qemu-server"
+	defaultConfDir     = "/etc/pve/qemu-server"
+	defaultPIDDir      = "/var/run/qemu-server"
+	defaultDebounceDur = 150 * time.Millisecond
 )
 
 var (
@@ -34,9 +37,14 @@ type resolverSink interface {
 // keeps the identity cache consistent by calling the appropriate resolver
 // methods when files are created, written, or deleted.
 type FileWatcher struct {
-	resolver resolverSink
-	watcher  *fsnotify.Watcher
-	log      *slog.Logger
+	resolver    resolverSink
+	watcher     *fsnotify.Watcher
+	log         *slog.Logger
+	debounceDur time.Duration
+
+	mu         sync.Mutex
+	confTimers map[int]*time.Timer
+	pidTimers  map[int]*time.Timer
 }
 
 // NewFileWatcher creates a FileWatcher that watches the production Proxmox
@@ -58,7 +66,14 @@ func newFileWatcherWithDirs(resolver resolverSink, log *slog.Logger, confDir, pi
 			return nil, fmt.Errorf("identity: watch %s: %w", dir, err)
 		}
 	}
-	return &FileWatcher{resolver: resolver, watcher: w, log: log}, nil
+	return &FileWatcher{
+		resolver:    resolver,
+		watcher:     w,
+		log:         log,
+		debounceDur: defaultDebounceDur,
+		confTimers:  make(map[int]*time.Timer),
+		pidTimers:   make(map[int]*time.Timer),
+	}, nil
 }
 
 // Run processes filesystem events until ctx is cancelled. It should be started
@@ -84,9 +99,33 @@ func (fw *FileWatcher) Run(ctx context.Context) error {
 	}
 }
 
+// schedule debounces fn for vmid using the provided timer map. Rapid events
+// for the same vmid reset the timer rather than stacking calls. When
+// debounceDur is zero (unit tests), fn is called synchronously.
+func (fw *FileWatcher) schedule(timers map[int]*time.Timer, vmid int, fn func()) {
+	if fw.debounceDur == 0 {
+		fn()
+		return
+	}
+	fw.mu.Lock()
+	defer fw.mu.Unlock()
+	if t, ok := timers[vmid]; ok {
+		t.Reset(fw.debounceDur)
+	} else {
+		timers[vmid] = time.AfterFunc(fw.debounceDur, func() {
+			fn()
+			fw.mu.Lock()
+			delete(timers, vmid)
+			fw.mu.Unlock()
+		})
+	}
+}
+
 // handleEvent dispatches a single fsnotify event to the appropriate resolver
-// method. Unknown filenames and irrelevant ops (e.g. Chmod on Linux during
-// deletion) are silently ignored.
+// method. Write/Create events are debounced to coalesce rapid-fire editor
+// saves. Remove/Rename are applied immediately (they don't repeat). Unknown
+// filenames and irrelevant ops (e.g. Chmod on Linux during deletion) are
+// silently ignored.
 func (fw *FileWatcher) handleEvent(ev fsnotify.Event) {
 	base := filepath.Base(ev.Name)
 
@@ -95,7 +134,7 @@ func (fw *FileWatcher) handleEvent(ev fsnotify.Event) {
 		switch {
 		case ev.Has(fsnotify.Write) || ev.Has(fsnotify.Create):
 			fw.log.Debug("identity: conf written, reloading config", "vmid", vmid, "path", ev.Name)
-			fw.resolver.ReloadConfig(vmid)
+			fw.schedule(fw.confTimers, vmid, func() { fw.resolver.ReloadConfig(vmid) })
 		case ev.Has(fsnotify.Remove) || ev.Has(fsnotify.Rename):
 			fw.log.Debug("identity: conf removed, invalidating entries", "vmid", vmid, "path", ev.Name)
 			fw.resolver.invalidateByVMID(vmid)
@@ -107,7 +146,7 @@ func (fw *FileWatcher) handleEvent(ev fsnotify.Event) {
 		vmid, _ := strconv.Atoi(m[1])
 		if ev.Has(fsnotify.Write) || ev.Has(fsnotify.Create) {
 			fw.log.Debug("identity: pid written, reloading process info", "vmid", vmid, "path", ev.Name)
-			fw.resolver.ReloadProcess(vmid)
+			fw.schedule(fw.pidTimers, vmid, func() { fw.resolver.ReloadProcess(vmid) })
 		}
 	}
 }
