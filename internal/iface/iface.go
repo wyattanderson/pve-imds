@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
-	"net/http"
 	"syscall"
 
 	"golang.org/x/sys/unix"
@@ -18,6 +17,7 @@ import (
 	"gvisor.dev/gvisor/pkg/tcpip/network/ipv4"
 
 	"github.com/wyattanderson/pve-imds/internal/identity"
+	"github.com/wyattanderson/pve-imds/internal/imds"
 	"github.com/wyattanderson/pve-imds/internal/manager"
 	"github.com/wyattanderson/pve-imds/internal/xdp"
 )
@@ -92,29 +92,5 @@ func (r *Runtime) Run(ctx context.Context) error {
 	}
 	defer listener.Close()
 
-	mux := http.NewServeMux()
-	mux.HandleFunc("/", func(w http.ResponseWriter, req *http.Request) {
-		rec, err := r.resolver.RecordByName(r.name, r.ifindex)
-		if err != nil {
-			http.Error(w, fmt.Sprintf("identity lookup failed: %v", err), http.StatusServiceUnavailable)
-			return
-		}
-		w.Header().Set("Content-Type", "text/plain")
-		fmt.Fprintf(w, "node:     %s\n", rec.Node)
-		fmt.Fprintf(w, "vmid:     %d\n", rec.VMID)
-		fmt.Fprintf(w, "netindex: %d\n", rec.NetIndex)
-		fmt.Fprintf(w, "pid:      %d\n", rec.ProcessInfo.PID)
-		fmt.Fprintf(w, "\n[vmconfig]\n")
-		fmt.Fprintf(w, "name:        %s\n", rec.Config.Name)
-		fmt.Fprintf(w, "ostype:      %s\n", rec.Config.OSType)
-		fmt.Fprintf(w, "description: %s\n", rec.Config.Description)
-		fmt.Fprintf(w, "tags:        %v\n", rec.Config.Tags)
-		for idx, dev := range rec.Config.Networks {
-			fmt.Fprintf(w, "net%d:        model=%s mac=%s bridge=%s\n", idx, dev.Model, dev.MAC, dev.Bridge)
-		}
-		for k, v := range rec.Config.Raw {
-			fmt.Fprintf(w, "%s: %s\n", k, v)
-		}
-	})
-	return serveIMDS(ctx, listener, mux)
+	return imds.Serve(ctx, listener, imds.NewHandler(r.resolver, r.name, r.ifindex))
 }

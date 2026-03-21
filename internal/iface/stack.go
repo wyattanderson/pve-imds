@@ -3,16 +3,9 @@
 package iface
 
 import (
-	"context"
-	"errors"
 	"fmt"
 	"log/slog"
-	"net"
-	"net/http"
 	"strings"
-	"time"
-
-	"golang.org/x/sync/errgroup"
 
 	"gvisor.dev/gvisor/pkg/tcpip"
 	"gvisor.dev/gvisor/pkg/tcpip/network/arp"
@@ -70,25 +63,4 @@ func newIMDSStack(log *slog.Logger, le stack.LinkEndpoint) (*stack.Stack, error)
 	}})
 
 	return s, nil
-}
-
-// serveIMDS runs handler over listener until ctx is cancelled, then shuts
-// down gracefully with a 5-second timeout. It does not close listener.
-func serveIMDS(ctx context.Context, listener net.Listener, handler http.Handler) error {
-	server := &http.Server{Handler: handler}
-
-	g, _ := errgroup.WithContext(ctx)
-	g.Go(func() error {
-		if err := server.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			return err
-		}
-		return nil
-	})
-	g.Go(func() error {
-		<-ctx.Done()
-		shutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		return server.Shutdown(shutCtx)
-	})
-	return g.Wait()
 }

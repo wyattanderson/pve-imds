@@ -16,6 +16,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/wyattanderson/pve-imds/internal/imds"
+
 	"gvisor.dev/gvisor/pkg/refs"
 	"gvisor.dev/gvisor/pkg/tcpip"
 	"gvisor.dev/gvisor/pkg/tcpip/adapters/gonet"
@@ -91,7 +93,7 @@ func TestServeIMDS_HTTPRoundTrip(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 		fmt.Fprintln(w, "ok")
 	})
-	go serveIMDS(ctx, listener, handler) //nolint:errcheck
+	go imds.Serve(ctx, listener, handler) //nolint:errcheck
 
 	clientStack := newClientStack(t, ethernet.New(ep2))
 
@@ -124,7 +126,7 @@ func TestServeIMDS_GracefulShutdown(t *testing.T) {
 
 	done := make(chan error, 1)
 	go func() {
-		done <- serveIMDS(ctx, listener, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+		done <- imds.Serve(ctx, listener, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
 	}()
 
 	cancel()
