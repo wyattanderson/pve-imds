@@ -13,9 +13,16 @@ import (
 	"github.com/wyattanderson/pve-imds/internal/identity"
 )
 
+// Resolver resolves VM identity for an incoming IMDS request. The method
+// signature matches identity.Resolver.RecordByName so the production
+// *identity.Resolver satisfies this interface without any wrapper.
+type Resolver interface {
+	RecordByName(ifname string, ifindex int32) (*identity.VMRecord, error)
+}
+
 // NewHandler returns an http.Handler that resolves the VM identity for the
 // given tap interface and writes a plain-text summary.
-func NewHandler(resolver *identity.Resolver, name string, ifindex int32) http.Handler {
+func NewHandler(resolver Resolver, name string, ifindex int32) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		rec, err := resolver.RecordByName(name, ifindex)
 		if err != nil {

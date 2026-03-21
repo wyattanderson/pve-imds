@@ -1,0 +1,20 @@
+[project]
+name = "pve-imds-conformance"
+version = "0.1.0"
+requires-python = ">=3.10"
+dependencies = [
+    "pytest>=7.0",
+    # cloud-init runtime requirements (cloud-init itself is on PYTHONPATH as a
+    # source checkout; we only need its transitive deps installed here).
+    "jinja2",
+    "oauthlib",
+    "configobj",
+    "pyyaml",
+    "requests",
+    "jsonpatch",
+    "jsonschema",
+]
+
+[tool.pytest.ini_options]
+# cloud-init source tree is added to PYTHONPATH via the Makefile.
+testpaths = ["."]
