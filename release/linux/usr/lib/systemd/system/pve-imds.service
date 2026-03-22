@@ -10,6 +10,9 @@ ExecStart=/usr/sbin/pve-imds
 Restart=always
 RestartSec=5s
 
+StandardOutput=journal
+StandardError=journal
+
 # TODO: Consider enabling the systemd watchdog (WatchdogSec=30s) to detect
 # freezes in the XDP redirect path or the proxy forwarding loop. Requires
 # the daemon to call sd_notify("WATCHDOG=1") at regular intervals.

@@ -5,6 +5,9 @@ import (
 	"log/slog"
 	"os"
 	"strings"
+
+	"github.com/coreos/go-systemd/v22/journal"
+	slogjournal "github.com/systemd/slog-journal"
 )
 
 // New creates and sets a global slog logger at the given level string.
@@ -23,7 +26,26 @@ func New(level string) *slog.Logger {
 		l = slog.LevelInfo
 	}
 
-	h := slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: l})
+	var h slog.Handler
+	if isJournal, _ := journal.StderrIsJournalStream(); isJournal {
+		jh, err := slogjournal.NewHandler(&slogjournal.Options{
+			Level: l,
+			ReplaceGroup: func(k string) string {
+				return strings.ReplaceAll(strings.ToUpper(k), "-", "_")
+			},
+			ReplaceAttr: func(_ []string, a slog.Attr) slog.Attr {
+				a.Key = strings.ReplaceAll(strings.ToUpper(a.Key), "-", "_")
+				return a
+			},
+		})
+		if err == nil {
+			h = jh
+		}
+	}
+	if h == nil {
+		h = slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: l})
+	}
+
 	logger := slog.New(h)
 	slog.SetDefault(logger)
 	return logger
