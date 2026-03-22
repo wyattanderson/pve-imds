@@ -124,7 +124,7 @@ func (ms MultiSink) HandleLinkEvent(ctx context.Context, ev Event) {
 // sink for each Created or Deleted event. It closes conn when ctx is done
 // so that a blocking Receive unblocks promptly.
 func (w *Watcher) Run(ctx context.Context, sink EventSink) error {
-	go func() { <-ctx.Done(); w.conn.Close() }()
+	go func() { <-ctx.Done(); w.conn.Close() }() //nolint:errcheck
 
 	for {
 		select {
@@ -158,7 +158,7 @@ func NewNetlinkConn() (*netlink.Conn, error) {
 		return nil, fmt.Errorf("dial netlink: %w", err)
 	}
 	if err := conn.JoinGroup(1); err != nil { // 1 = RTNLGRP_LINK
-		conn.Close()
+		conn.Close() //nolint:errcheck
 		return nil, fmt.Errorf("join RTNLGRP_LINK: %w", err)
 	}
 	return conn, nil

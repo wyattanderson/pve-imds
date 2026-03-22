@@ -22,16 +22,16 @@ func LoadAndAttach(sockfd int, iface *net.Interface) (func(), error) {
 		Interface: iface.Index,
 	})
 	if err != nil {
-		objs.Close()
+		objs.Close() //nolint:errcheck
 		return nil, fmt.Errorf("attach XDP to %s: %w", iface.Name, err)
 	}
 
 	key, val := uint32(0), uint32(sockfd)
 	if err := objs.XsksMap.Update(&key, &val, 0); err != nil {
-		attached.Close()
-		objs.Close()
+		attached.Close() //nolint:errcheck
+		objs.Close()     //nolint:errcheck
 		return nil, fmt.Errorf("update XSKMAP: %w", err)
 	}
 
-	return func() { attached.Close(); objs.Close() }, nil
+	return func() { attached.Close(); objs.Close() }, nil //nolint:errcheck
 }

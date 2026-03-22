@@ -38,11 +38,6 @@ func (r *blockingRuntime) Run(ctx context.Context) error {
 	return nil
 }
 
-// instantRuntime returns immediately.
-type instantRuntime struct{}
-
-func (r *instantRuntime) Run(_ context.Context) error { return nil }
-
 func TestStartStop(t *testing.T) {
 	m := newTestManager(t)
 

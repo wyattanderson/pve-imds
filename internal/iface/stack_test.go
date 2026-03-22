@@ -84,14 +84,14 @@ func TestServeIMDS_HTTPRoundTrip(t *testing.T) {
 
 	listener, err := gonet.ListenTCP(s, tcpip.FullAddress{Addr: imdsAddr, Port: 80}, ipv4.ProtocolNumber)
 	require.NoError(t, err)
-	t.Cleanup(func() { listener.Close() })
+	t.Cleanup(func() { listener.Close() }) //nolint:errcheck
 
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		fmt.Fprintln(w, "ok")
+		fmt.Fprintln(w, "ok") //nolint:errcheck
 	})
 	go imds.Serve(ctx, listener, handler) //nolint:errcheck
 
@@ -100,9 +100,9 @@ func TestServeIMDS_HTTPRoundTrip(t *testing.T) {
 	conn, err := gonet.DialContextTCP(ctx, clientStack,
 		tcpip.FullAddress{Addr: imdsAddr, Port: 80}, ipv4.ProtocolNumber)
 	require.NoError(t, err)
-	defer conn.Close()
+	defer conn.Close() //nolint:errcheck
 
-	fmt.Fprint(conn, "GET / HTTP/1.0\r\nHost: 169.254.169.254\r\n\r\n")
+	fmt.Fprint(conn, "GET / HTTP/1.0\r\nHost: 169.254.169.254\r\n\r\n") //nolint:errcheck
 
 	resp, err := http.ReadResponse(bufio.NewReader(conn), nil)
 	require.NoError(t, err)
@@ -120,7 +120,7 @@ func TestServeIMDS_GracefulShutdown(t *testing.T) {
 
 	listener, err := gonet.ListenTCP(s, tcpip.FullAddress{Addr: imdsAddr, Port: 80}, ipv4.ProtocolNumber)
 	require.NoError(t, err)
-	t.Cleanup(func() { listener.Close() })
+	t.Cleanup(func() { listener.Close() }) //nolint:errcheck
 
 	ctx, cancel := context.WithCancel(context.Background())
 

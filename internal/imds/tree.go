@@ -232,8 +232,8 @@ func serveTree(w http.ResponseWriter, metaPath string, tree *treeNode) {
 	}
 	w.Header().Set("Content-Type", "text/plain")
 	if node.value != nil {
-		fmt.Fprint(w, *node.value)
+		fmt.Fprint(w, *node.value) //nolint:errcheck
 		return
 	}
-	fmt.Fprint(w, node.listing())
+	fmt.Fprint(w, node.listing()) //nolint:errcheck
 }

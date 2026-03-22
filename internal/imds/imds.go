@@ -71,7 +71,7 @@ func NewHandler(resolver Resolver, name string, ifindex int32) http.Handler {
 				return
 			}
 			w.Header().Set("Content-Type", "application/octet-stream")
-			fmt.Fprint(w, userData)
+			fmt.Fprint(w, userData) //nolint:errcheck
 		default:
 			http.NotFound(w, req)
 		}

@@ -61,7 +61,7 @@ func main() {
 		logger.Error("failed to open output file", "path", *outputPath, "err", err)
 		os.Exit(1)
 	}
-	defer f.Close()
+	defer f.Close() //nolint:errcheck
 
 	logger.Info("dialing netlink RTNETLINK socket")
 	// family 0 = NETLINK_ROUTE
@@ -85,7 +85,7 @@ func main() {
 	go func() {
 		<-ctx.Done()
 		logger.Debug("context cancelled, closing netlink connection")
-		conn.Close()
+		conn.Close() //nolint:errcheck
 	}()
 
 	logger.Info("recording netlink messages",

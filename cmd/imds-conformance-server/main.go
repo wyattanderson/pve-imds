@@ -84,7 +84,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "listen: %v\n", err)
 		os.Exit(1)
 	}
-	defer ln.Close()
+	defer ln.Close() //nolint:errcheck
 
 	port := ln.Addr().(*net.TCPAddr).Port
 	rec := testRecord()

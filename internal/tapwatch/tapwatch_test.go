@@ -21,7 +21,7 @@ func loadCapture(t *testing.T, path string) []netlink.Message {
 	t.Helper()
 	f, err := os.Open(path)
 	require.NoError(t, err, "open capture")
-	defer f.Close()
+	defer f.Close() //nolint:errcheck
 
 	var msgs []netlink.Message
 	sc := bufio.NewScanner(f)

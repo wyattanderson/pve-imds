@@ -62,7 +62,7 @@ func newFileWatcherWithDirs(resolver resolverSink, log *slog.Logger, confDir, pi
 	}
 	for _, dir := range []string{confDir, pidDir} {
 		if err := w.Add(dir); err != nil {
-			w.Close()
+			w.Close() //nolint:errcheck
 			return nil, fmt.Errorf("identity: watch %s: %w", dir, err)
 		}
 	}
@@ -80,7 +80,7 @@ func newFileWatcherWithDirs(resolver resolverSink, log *slog.Logger, confDir, pi
 // in a goroutine. Run always returns nil on a clean shutdown (ctx cancelled or
 // watcher channels closed).
 func (fw *FileWatcher) Run(ctx context.Context) error {
-	defer fw.watcher.Close()
+	defer fw.watcher.Close() //nolint:errcheck
 	for {
 		select {
 		case <-ctx.Done():

@@ -39,7 +39,7 @@ func NewStaticARPEndpoint(log *slog.Logger, lower stack.LinkEndpoint, s *stack.S
 		s:     s,
 		nicID: nicID,
 	}
-	e.Endpoint.Init(lower, e)
+	e.Init(lower, e)
 	return e
 }
 

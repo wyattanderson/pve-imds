@@ -56,7 +56,7 @@ func (r *Runtime) Run(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("create AF_XDP socket: %w", err)
 	}
-	defer syscall.Close(sockfd)
+	defer syscall.Close(sockfd) //nolint:errcheck
 
 	cleanup, err := xdp.LoadAndAttach(sockfd, iface)
 	if err != nil {
@@ -90,7 +90,7 @@ func (r *Runtime) Run(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("listen TCP 169.254.169.254:80: %w", err)
 	}
-	defer listener.Close()
+	defer listener.Close() //nolint:errcheck
 
 	return imds.Serve(ctx, listener, imds.NewHandler(r.resolver, r.name, r.ifindex))
 }
