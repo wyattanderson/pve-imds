@@ -1,5 +1,6 @@
 //go:build linux
 
+// Package xdp manages the AF_XDP redirect program that intercepts IMDS traffic.
 package xdp
 
 import (

@@ -7,6 +7,7 @@
 package vmproc
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -90,7 +91,7 @@ func (t *Tracker) readPID(vmid int) (int, error) {
 func parseStartTime(stat string) (uint64, error) {
 	lastParen := strings.LastIndex(stat, ")")
 	if lastParen < 0 {
-		return 0, fmt.Errorf("malformed stat: no closing parenthesis")
+		return 0, errors.New("malformed stat: no closing parenthesis")
 	}
 
 	// Fields starting at field 3 (state).

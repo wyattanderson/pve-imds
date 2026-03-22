@@ -1,3 +1,4 @@
+// Package imds implements the EC2 Instance Metadata Service HTTP handler.
 package imds
 
 import (

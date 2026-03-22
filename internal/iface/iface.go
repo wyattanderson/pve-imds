@@ -1,5 +1,6 @@
 //go:build linux
 
+// Package iface manages AF_XDP sockets attached to tap interfaces.
 package iface
 
 import (

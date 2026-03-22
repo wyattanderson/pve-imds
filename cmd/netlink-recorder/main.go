@@ -49,6 +49,13 @@ type ifInfomsg struct {
 }
 
 func main() {
+	if err := run(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+}
+
+func run() error {
 	outputPath := flag.String("output", "capture.nl", "file to write captured messages to (one base64-encoded message per line)")
 	filterPrefix := flag.String("filter", "tap", "only record messages for interfaces whose name starts with this prefix (empty = record all)")
 	flag.Parse()
@@ -58,8 +65,7 @@ func main() {
 	logger.Info("opening output file", "path", *outputPath)
 	f, err := os.OpenFile(*outputPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
 	if err != nil {
-		logger.Error("failed to open output file", "path", *outputPath, "err", err)
-		os.Exit(1)
+		return fmt.Errorf("open output file %s: %w", *outputPath, err)
 	}
 	defer f.Close() //nolint:errcheck
 
@@ -67,14 +73,12 @@ func main() {
 	// family 0 = NETLINK_ROUTE
 	conn, err := netlink.Dial(0, nil)
 	if err != nil {
-		logger.Error("failed to dial netlink", "err", err)
-		os.Exit(1)
+		return fmt.Errorf("dial netlink: %w", err)
 	}
 	// RTNLGRP_LINK = 1
 	logger.Info("joining RTNLGRP_LINK multicast group")
 	if err := conn.JoinGroup(1); err != nil {
-		logger.Error("failed to join RTNLGRP_LINK", "err", err)
-		os.Exit(1)
+		return fmt.Errorf("join RTNLGRP_LINK: %w", err)
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -104,7 +108,7 @@ func main() {
 			// error; if the context is done that's the expected shutdown path.
 			if ctx.Err() != nil {
 				logger.Info("shutting down", "recorded", recorded, "skipped", skipped)
-				return
+				return nil
 			}
 			logger.Error("receive error", "err", err)
 			continue
@@ -136,13 +140,11 @@ func main() {
 
 			raw, err := msg.MarshalBinary()
 			if err != nil {
-				logger.Error("failed to marshal message", "err", err)
-				os.Exit(1)
+				return fmt.Errorf("marshal message: %w", err)
 			}
 			encoded := base64.StdEncoding.EncodeToString(raw)
 			if _, err := fmt.Fprintln(f, encoded); err != nil {
-				logger.Error("failed to write message", "err", err)
-				os.Exit(1)
+				return fmt.Errorf("write message: %w", err)
 			}
 		}
 	}

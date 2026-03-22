@@ -15,7 +15,7 @@ import (
 // the root fx.New call to wire the resolver, file watcher, and event sink.
 var Module = fx.Module("identity",
 	// Real OS filesystem shared by both the config reader and the proc tracker.
-	fx.Provide(func() afero.Fs { return afero.NewOsFs() }),
+	fx.Provide(afero.NewOsFs),
 
 	// Process tracker (reads /var/run/qemu-server/*.pid and /proc/*/stat).
 	fx.Provide(vmproc.New),

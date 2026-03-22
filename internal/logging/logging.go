@@ -1,3 +1,4 @@
+// Package logging initialises the shared slog logger for pve-imds.
 package logging
 
 import (

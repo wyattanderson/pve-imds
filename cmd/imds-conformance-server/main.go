@@ -79,10 +79,19 @@ type serverInfo struct {
 }
 
 func main() {
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "listen: %v\n", err)
+	if err := run(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
+	}
+}
+
+func run() error {
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
+	ln, err := new(net.ListenConfig).Listen(ctx, "tcp", "127.0.0.1:0")
+	if err != nil {
+		return fmt.Errorf("listen: %w", err)
 	}
 	defer ln.Close() //nolint:errcheck
 
@@ -90,9 +99,6 @@ func main() {
 	rec := testRecord()
 	resolver := &fakeResolver{rec}
 	handler := imds.NewHandler(resolver, "tap100i0", rec.IfIndex)
-
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
 
 	mac := rec.Config.Networks[0].MAC.String()
 	info := serverInfo{
@@ -109,7 +115,7 @@ func main() {
 	_ = os.Stdout.Sync()
 
 	if err := imds.Serve(ctx, ln, handler); err != nil {
-		fmt.Fprintf(os.Stderr, "serve: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("serve: %w", err)
 	}
+	return nil
 }

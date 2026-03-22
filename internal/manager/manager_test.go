@@ -133,7 +133,7 @@ func TestHandleLinkEventDoesNotBlock(t *testing.T) {
 	// Do NOT start the event loop — events pile up in the buffer.
 
 	// Fill the buffer.
-	for i := 0; i < 64; i++ {
+	for range 64 {
 		m.events <- tapwatch.Event{Type: tapwatch.Created, Name: "tap100i0", Index: 10}
 	}
 

@@ -2,6 +2,11 @@ version: "2"
 linters:
   default: standard
   enable:
+    - gocritic
+    - modernize
+    - noctx
+    - perfsprint
+    - prealloc
     - revive
 formatters:
   enable:

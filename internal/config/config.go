@@ -1,3 +1,4 @@
+// Package config defines the pve-imds configuration structure and defaults.
 package config
 
 // Config holds all pve-imds configuration.

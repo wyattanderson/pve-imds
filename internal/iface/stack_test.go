@@ -88,7 +88,7 @@ func TestServeIMDS_HTTPRoundTrip(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		fmt.Fprintln(w, "ok") //nolint:errcheck
 	})
@@ -125,7 +125,7 @@ func TestServeIMDS_GracefulShutdown(t *testing.T) {
 
 	done := make(chan error, 1)
 	go func() {
-		done <- imds.Serve(ctx, listener, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+		done <- imds.Serve(ctx, listener, http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {}))
 	}()
 
 	cancel()

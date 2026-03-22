@@ -1,3 +1,4 @@
+// Command pve-imds is the main daemon for the Proxmox VE IMDS service.
 package main
 
 import (
@@ -31,10 +32,10 @@ func newRootCmd() *cobra.Command {
 	root := &cobra.Command{
 		Use:   "pve-imds",
 		Short: "AWS IMDS-compatible metadata service for Proxmox VE",
-		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		PersistentPreRunE: func(_ *cobra.Command, _ []string) error {
 			return initConfig(cfgFile)
 		},
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(_ *cobra.Command, _ []string) error {
 			return runServe(fxLogging)
 		},
 	}

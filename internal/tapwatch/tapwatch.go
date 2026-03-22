@@ -41,7 +41,9 @@ type ifInfomsg struct {
 type EventType int
 
 const (
+	// Created is emitted when a tap interface transitions to the up state.
 	Created EventType = iota
+	// Deleted is emitted when a tap interface is removed.
 	Deleted
 )
 
@@ -114,6 +116,7 @@ type EventSink interface {
 // same tap interface lifecycle events.
 type MultiSink []EventSink
 
+// HandleLinkEvent dispatches ev to all sinks in the slice.
 func (ms MultiSink) HandleLinkEvent(ctx context.Context, ev Event) {
 	for _, s := range ms {
 		s.HandleLinkEvent(ctx, ev)
