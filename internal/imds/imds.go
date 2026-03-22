@@ -65,9 +65,13 @@ func NewHandler(resolver Resolver, name string, ifindex int32) http.Handler {
 			md := MetadataFromRecord(rec)
 			serveTree(w, rest, buildTree(md))
 		case "user-data":
-			// User-data is not yet implemented.
-			// Return 404 so cloud-init treats it as absent rather than erroring.
-			http.NotFound(w, req)
+			userData, ok := ParseUserData(rec.Config.Description)
+			if !ok {
+				http.NotFound(w, req)
+				return
+			}
+			w.Header().Set("Content-Type", "application/octet-stream")
+			fmt.Fprint(w, userData)
 		default:
 			http.NotFound(w, req)
 		}
