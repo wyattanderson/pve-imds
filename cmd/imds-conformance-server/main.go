@@ -20,7 +20,6 @@ import (
 	"github.com/wyattanderson/pve-imds/internal/identity"
 	"github.com/wyattanderson/pve-imds/internal/imds"
 	"github.com/wyattanderson/pve-imds/internal/vmconfig"
-	"github.com/wyattanderson/pve-imds/internal/vmproc"
 )
 
 // fakeResolver returns a fixed VMRecord on every call, ignoring ifname and
@@ -64,7 +63,6 @@ func testRecord() *identity.VMRecord {
 				"memory": "2048",
 			},
 		},
-		ProcessInfo: vmproc.ProcessInfo{PID: 12345, StartTime: 999},
 	}
 }
 

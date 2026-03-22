@@ -4,16 +4,14 @@ import (
 	"slices"
 
 	"github.com/wyattanderson/pve-imds/internal/vmconfig"
-	"github.com/wyattanderson/pve-imds/internal/vmproc"
 )
 
 // entry is a single cached VM identity record.
 type entry struct {
-	vmid        int
-	netIndex    int
-	ifindex     int32
-	config      *vmconfig.VMConfig
-	processInfo vmproc.ProcessInfo
+	vmid     int
+	netIndex int
+	ifindex  int32
+	config   *vmconfig.VMConfig
 }
 
 // addIfname records ifname under vmid in the secondary index, avoiding

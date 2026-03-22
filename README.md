@@ -26,8 +26,6 @@ From the tap interface name, `pve-imds` derives a tuple forwarded as HTTP header
 | `X-PVE-Node` | hostname |
 | `X-PVE-VMID` | parsed from interface name (`tap{vmid}i{index}`) |
 | `X-PVE-Net-Index` | parsed from interface name |
-| `X-PVE-QEMU-PID` | looked up from `/proc` |
-| `X-PVE-QEMU-PID-Starttime` | from `/proc/{pid}/stat` — used to disambiguate reused PIDs |
 | `X-PVE-Config-Digest` | from `/etc/pve/qemu-server/{vmid}.conf` — detects config changes |
 
 ## Requirements

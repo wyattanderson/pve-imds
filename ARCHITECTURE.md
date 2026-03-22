@@ -79,7 +79,7 @@ tapwatch.Run (goroutine)
 Created event  ──►  parse vmid + net_index from interface name
                         │
                         ▼
-                    lookup VM identity (cache → /proc + /etc/pve/qemu-server/)
+                    lookup VM identity (cache → /etc/pve/qemu-server/)
                         │
                         ▼
                     create AF_XDP socket
@@ -93,13 +93,13 @@ Interface names follow the Proxmox convention `tap{vmid}i{netindex}`. The daemon
 
 ## VM identity cache
 
-Resolving the full identity tuple `(node, vmid, qemu_pid, qemu_pid_starttime, net_index, config_digest)` involves filesystem and procfs reads. This information is cached in memory per tap interface and refreshed:
+Resolving the identity tuple `(node, vmid, net_index, config_digest)` involves filesystem reads. This information is cached in memory per tap interface and refreshed:
 
 - On interface creation (cold start).
 - When a request arrives and the config digest has changed (detected lazily from `inotify` or on-demand hash comparison).
 - Explicitly on cache invalidation signals.
 
-`qemu_pid_starttime` from `/proc/{pid}/stat` field 22 (in jiffies since boot) is included to prevent PID reuse from causing stale identity hits.
+VM restarts are handled by the tap interface lifecycle: Proxmox tears down the tap on VM stop (DELLINK evicts the entry) and recreates it on start (NEWLINK populates a fresh entry).
 
 ## Repository layout
 
@@ -123,7 +123,6 @@ pve-imds/
 │   ├── manager/                # Interface lifecycle manager
 │   ├── tapwatch/               # Tap interface lifecycle watcher (netlink)
 │   ├── vmconfig/               # Proxmox VM config parsing
-│   ├── vmproc/                 # /proc-based PID and starttime lookup
 │   └── xdp/                    # eBPF program + bpf2go bindings
 ├── go.mod
 ├── go.sum

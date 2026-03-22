@@ -8,17 +8,13 @@ import (
 	"go.uber.org/fx"
 
 	"github.com/wyattanderson/pve-imds/internal/tapwatch"
-	"github.com/wyattanderson/pve-imds/internal/vmproc"
 )
 
 // Module bundles the full identity subsystem as an fx.Option. Include it in
 // the root fx.New call to wire the resolver, file watcher, and event sink.
 var Module = fx.Module("identity",
-	// Real OS filesystem shared by both the config reader and the proc tracker.
+	// Real OS filesystem for the config reader.
 	fx.Provide(afero.NewOsFs),
-
-	// Process tracker (reads /var/run/qemu-server/*.pid and /proc/*/stat).
-	fx.Provide(vmproc.New),
 
 	// Resolver: provides *Resolver for internal wiring and Provider for the
 	// HTTP proxy layer.

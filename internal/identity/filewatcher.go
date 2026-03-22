@@ -15,27 +15,22 @@ import (
 
 const (
 	defaultConfDir     = "/etc/pve/qemu-server"
-	defaultPIDDir      = "/var/run/qemu-server"
 	defaultDebounceDur = 150 * time.Millisecond
 )
 
-var (
-	confFileRe = regexp.MustCompile(`^(\d+)\.conf$`)
-	pidFileRe  = regexp.MustCompile(`^(\d+)\.pid$`)
-)
+var confFileRe = regexp.MustCompile(`^(\d+)\.conf$`)
 
 // resolverSink is the subset of *Resolver that FileWatcher calls back into.
 // The interface exists so that integration tests can inject a spy without
 // needing the real resolver's hardcoded file paths.
 type resolverSink interface {
 	ReloadConfig(vmid int)
-	ReloadProcess(vmid int)
 	invalidateByVMID(vmid int)
 }
 
-// FileWatcher watches the Proxmox config and PID directories for changes and
-// keeps the identity cache consistent by calling the appropriate resolver
-// methods when files are created, written, or deleted.
+// FileWatcher watches the Proxmox config directory for changes and keeps the
+// identity cache consistent by calling the appropriate resolver methods when
+// files are created, written, or deleted.
 type FileWatcher struct {
 	resolver    resolverSink
 	watcher     *fsnotify.Watcher
@@ -44,27 +39,25 @@ type FileWatcher struct {
 
 	mu         sync.Mutex
 	confTimers map[int]*time.Timer
-	pidTimers  map[int]*time.Timer
 }
 
 // NewFileWatcher creates a FileWatcher that watches the production Proxmox
-// directories and calls back into resolver on relevant changes.
+// config directory and calls back into resolver on relevant changes.
 func NewFileWatcher(resolver *Resolver, log *slog.Logger) (*FileWatcher, error) {
-	return newFileWatcherWithDirs(resolver, log, defaultConfDir, defaultPIDDir)
+	return newFileWatcherWithDirs(resolver, log, defaultConfDir)
 }
 
-// newFileWatcherWithDirs is the real constructor, accepting explicit directory
-// paths. Used by NewFileWatcher (production) and integration tests (temp dirs).
-func newFileWatcherWithDirs(resolver resolverSink, log *slog.Logger, confDir, pidDir string) (*FileWatcher, error) {
+// newFileWatcherWithDirs is the real constructor, accepting an explicit
+// directory path. Used by NewFileWatcher (production) and integration tests
+// (temp dirs).
+func newFileWatcherWithDirs(resolver resolverSink, log *slog.Logger, confDir string) (*FileWatcher, error) {
 	w, err := fsnotify.NewWatcher()
 	if err != nil {
 		return nil, fmt.Errorf("identity: create fsnotify watcher: %w", err)
 	}
-	for _, dir := range []string{confDir, pidDir} {
-		if err := w.Add(dir); err != nil {
-			w.Close() //nolint:errcheck
-			return nil, fmt.Errorf("identity: watch %s: %w", dir, err)
-		}
+	if err := w.Add(confDir); err != nil {
+		w.Close() //nolint:errcheck
+		return nil, fmt.Errorf("identity: watch %s: %w", confDir, err)
 	}
 	return &FileWatcher{
 		resolver:    resolver,
@@ -72,7 +65,6 @@ func newFileWatcherWithDirs(resolver resolverSink, log *slog.Logger, confDir, pi
 		log:         log,
 		debounceDur: defaultDebounceDur,
 		confTimers:  make(map[int]*time.Timer),
-		pidTimers:   make(map[int]*time.Timer),
 	}, nil
 }
 
@@ -148,11 +140,4 @@ func (fw *FileWatcher) handleEvent(ev fsnotify.Event) {
 		return
 	}
 
-	if m := pidFileRe.FindStringSubmatch(base); m != nil {
-		vmid, _ := strconv.Atoi(m[1])
-		if ev.Has(fsnotify.Write) || ev.Has(fsnotify.Create) {
-			fw.log.Debug("identity: pid written, reloading process info", "vmid", vmid, "path", ev.Name)
-			fw.schedule(fw.pidTimers, vmid, func() { fw.resolver.ReloadProcess(vmid) })
-		}
-	}
 }

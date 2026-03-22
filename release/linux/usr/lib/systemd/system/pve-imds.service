@@ -1,8 +1,6 @@
 [Unit]
 Description=Proxmox VE AWS IMDS-compatible metadata service
 Documentation=https://github.com/wyattanderson/pve-imds
-# pve-imds must be running before VMs start and before pveproxy begins
-# serving, so that 169.254.169.254:80 interception is in place from the start.
 Before=pveproxy.service pve-guests.service
 After=network.target
 
@@ -12,21 +10,28 @@ ExecStart=/usr/sbin/pve-imds
 Restart=always
 RestartSec=5s
 
-# XDP attachment requires CAP_NET_ADMIN and CAP_BPF.
-# TODO: Consider dropping to an unprivileged user with ambient capabilities
-# once the privilege model is fully worked out.
-
 # TODO: Consider enabling the systemd watchdog (WatchdogSec=30s) to detect
 # freezes in the XDP redirect path or the proxy forwarding loop. Requires
 # the daemon to call sd_notify("WATCHDOG=1") at regular intervals.
 
-# Security hardening
+User=pve-imds
+Group=pve-imds
+DynamicUser=yes
+# www-data is necessary to read the VM configuration files in /etc/pve/qemu-server
+SupplementaryGroups=www-data
+AmbientCapabilities=CAP_NET_ADMIN CAP_BPF CAP_NET_RAW
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_BPF CAP_NET_RAW
+
 NoNewPrivileges=yes
 PrivateTmp=yes
 ProtectSystem=full
 ProtectHome=yes
 RuntimeDirectory=pve-imds
 RuntimeDirectoryMode=0750
+MemoryDenyWriteExecute=yes
+
+# TODO: if viable, use PrivateBPF= and BPFDelegate* restrictions to lock down
+# BPF capabilities once https://github.com/cilium/ebpf/issues/1921 is resolved
 
 [Install]
 WantedBy=pveproxy.service pve-guests.service

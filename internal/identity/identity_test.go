@@ -14,29 +14,17 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/wyattanderson/pve-imds/internal/tapwatch"
-	"github.com/wyattanderson/pve-imds/internal/vmproc"
 )
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
 // vmFixture holds the parameters for a single fake VM used across tests.
 type vmFixture struct {
-	vmid      int
-	netIndex  int
-	ifname    string
-	ifindex   int32
-	mac       string // colon-separated, e.g. "BC:24:11:AA:BB:CC"
-	pid       int
-	startTime uint64
-}
-
-// statLine builds a minimal /proc/{pid}/stat line with the given starttime.
-// Field 22 (starttime) is placed at index 19 of the post-comm fields.
-func statLine(pid int, startTime uint64) string {
-	return fmt.Sprintf(
-		"%d (qemu-system-x86_) S 1 %d %d 0 -1 4194304 0 0 0 0 0 0 0 0 20 0 1 0 %d 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0",
-		pid, pid, pid, startTime,
-	)
+	vmid     int
+	netIndex int
+	ifname   string
+	ifindex  int32
+	mac      string // colon-separated, e.g. "BC:24:11:AA:BB:CC"
 }
 
 // confContent builds a minimal /etc/pve/qemu-server/{vmid}.conf with a single
@@ -50,35 +38,25 @@ func confContent(vmid, netIndex int, mac string) string {
 
 type testEnv struct {
 	configFS afero.Fs
-	procFS   afero.Fs
 	resolver *Resolver
 }
 
 func newTestEnv(t *testing.T) *testEnv {
 	t.Helper()
 	cfgFS := afero.NewMemMapFs()
-	procFS := afero.NewMemMapFs()
-	r, err := New(cfgFS, vmproc.New(procFS), slog.New(slog.NewTextHandler(os.Stderr, nil)))
+	r, err := New(cfgFS, slog.New(slog.NewTextHandler(os.Stderr, nil)))
 	require.NoError(t, err)
-	return &testEnv{configFS: cfgFS, procFS: procFS, resolver: r}
+	return &testEnv{configFS: cfgFS, resolver: r}
 }
 
-// addVM writes config, PID, and stat files and returns the net.HardwareAddr
-// for the fixture's MAC.
+// addVM writes the config file and returns the net.HardwareAddr for the
+// fixture's MAC.
 func (e *testEnv) addVM(t *testing.T, f vmFixture) net.HardwareAddr {
 	t.Helper()
 
 	confPath := fmt.Sprintf("/etc/pve/qemu-server/%d.conf", f.vmid)
 	require.NoError(t, afero.WriteFile(e.configFS, confPath,
 		[]byte(confContent(f.vmid, f.netIndex, f.mac)), 0644))
-
-	pidPath := fmt.Sprintf("/var/run/qemu-server/%d.pid", f.vmid)
-	require.NoError(t, afero.WriteFile(e.procFS, pidPath,
-		fmt.Appendf(nil, "%d\n", f.pid), 0644))
-
-	statPath := fmt.Sprintf("/proc/%d/stat", f.pid)
-	require.NoError(t, afero.WriteFile(e.procFS, statPath,
-		[]byte(statLine(f.pid, f.startTime)), 0644))
 
 	mac, err := net.ParseMAC(f.mac)
 	require.NoError(t, err)
@@ -101,13 +79,11 @@ func (e *testEnv) populate(t *testing.T, f vmFixture) {
 }
 
 var vm100 = vmFixture{
-	vmid:      100,
-	netIndex:  0,
-	ifname:    "tap100i0",
-	ifindex:   5,
-	mac:       "BC:24:11:AA:BB:CC",
-	pid:       4321,
-	startTime: 12345678,
+	vmid:     100,
+	netIndex: 0,
+	ifname:   "tap100i0",
+	ifindex:  5,
+	mac:      "BC:24:11:AA:BB:CC",
 }
 
 // ── tests ─────────────────────────────────────────────────────────────────────
@@ -122,8 +98,6 @@ func TestLookupSuccess(t *testing.T) {
 	assert.Equal(t, vm100.vmid, rec.VMID)
 	assert.Equal(t, vm100.netIndex, rec.NetIndex)
 	assert.Equal(t, vm100.ifindex, rec.IfIndex)
-	assert.Equal(t, vm100.pid, rec.ProcessInfo.PID)
-	assert.Equal(t, vm100.startTime, rec.ProcessInfo.StartTime)
 	assert.Equal(t, "vm100", rec.Config.Name)
 	// Node should be the real hostname.
 	hostname, _ := os.Hostname()
@@ -153,35 +127,6 @@ func TestLookupMACMismatch(t *testing.T) {
 	wrongMAC, _ := net.ParseMAC("DE:AD:BE:EF:00:01")
 	_, err := env.resolver.Lookup(vm100.ifname, vm100.ifindex, wrongMAC)
 	assert.ErrorIs(t, err, ErrMACMismatch)
-}
-
-func TestLookupProcessChanged(t *testing.T) {
-	env := newTestEnv(t)
-	env.addVM(t, vm100)
-	env.populate(t, vm100)
-
-	// Overwrite the stat file with a different starttime (simulates VM restart).
-	statPath := fmt.Sprintf("/proc/%d/stat", vm100.pid)
-	require.NoError(t, afero.WriteFile(env.procFS, statPath,
-		[]byte(statLine(vm100.pid, vm100.startTime+1)), 0644))
-
-	mac, _ := net.ParseMAC(vm100.mac)
-	_, err := env.resolver.Lookup(vm100.ifname, vm100.ifindex, mac)
-	assert.ErrorIs(t, err, ErrProcessChanged)
-}
-
-func TestLookupProcessStatGone(t *testing.T) {
-	env := newTestEnv(t)
-	env.addVM(t, vm100)
-	env.populate(t, vm100)
-
-	// Remove the stat file entirely (process exited).
-	statPath := fmt.Sprintf("/proc/%d/stat", vm100.pid)
-	require.NoError(t, env.procFS.Remove(statPath))
-
-	mac, _ := net.ParseMAC(vm100.mac)
-	_, err := env.resolver.Lookup(vm100.ifname, vm100.ifindex, mac)
-	assert.ErrorIs(t, err, ErrProcessChanged)
 }
 
 func TestHandleLinkEventCreated(t *testing.T) {
@@ -242,11 +187,11 @@ func TestVmidToIfnamesSecondaryIndex(t *testing.T) {
 	env := newTestEnv(t)
 
 	f0 := vmFixture{vmid: 200, netIndex: 0, ifname: "tap200i0", ifindex: 10,
-		mac: "AA:BB:CC:DD:EE:01", pid: 5000, startTime: 111}
+		mac: "AA:BB:CC:DD:EE:01"}
 	f1 := vmFixture{vmid: 200, netIndex: 1, ifname: "tap200i1", ifindex: 11,
-		mac: "AA:BB:CC:DD:EE:02", pid: 5000, startTime: 111}
+		mac: "AA:BB:CC:DD:EE:02"}
 
-	// Both tap interfaces share the same VMID and PID.
+	// Both tap interfaces share the same VMID.
 	env.addVM(t, f0)
 	// f1 uses the same config; write a two-NIC config instead.
 	confPath := "/etc/pve/qemu-server/200.conf"
@@ -293,32 +238,6 @@ func TestReloadConfig(t *testing.T) {
 	env.resolver.mu.RUnlock()
 	require.NotNil(t, e)
 	assert.Equal(t, "updated", e.config.Name)
-}
-
-// TestReloadProcess verifies that ReloadProcess refreshes the PID/starttime
-// in all cache entries for a VMID.
-func TestReloadProcess(t *testing.T) {
-	env := newTestEnv(t)
-	env.addVM(t, vm100)
-	env.populate(t, vm100)
-
-	// "Restart" the VM: new PID, new starttime in the pid and stat files.
-	newPID, newStart := 9999, uint64(99999999)
-	pidPath := fmt.Sprintf("/var/run/qemu-server/%d.pid", vm100.vmid)
-	require.NoError(t, afero.WriteFile(env.procFS, pidPath,
-		fmt.Appendf(nil, "%d\n", newPID), 0644))
-	statPath := fmt.Sprintf("/proc/%d/stat", newPID)
-	require.NoError(t, afero.WriteFile(env.procFS, statPath,
-		[]byte(statLine(newPID, newStart)), 0644))
-
-	env.resolver.ReloadProcess(vm100.vmid)
-
-	env.resolver.mu.RLock()
-	e := env.resolver.entries[vm100.ifname]
-	env.resolver.mu.RUnlock()
-	require.NotNil(t, e)
-	assert.Equal(t, newPID, e.processInfo.PID)
-	assert.Equal(t, newStart, e.processInfo.StartTime)
 }
 
 // TestConcurrentLookupAndPopulate verifies there are no data races when

@@ -57,11 +57,9 @@ The XDP program must:
 
 Interface name `tap{vmid}i{netindex}` → parse vmid and net_index directly.
 
-Full tuple `(node, vmid, qemu_pid, qemu_pid_starttime, net_index, config_digest)`:
+Full tuple `(node, vmid, net_index, config_digest)`:
 
 - `node`: hostname
-- `qemu_pid`: find process with argv matching `kvm.*-id {vmid}` or check `/var/run/qemu-server/{vmid}.pid`
-- `qemu_pid_starttime`: field 22 of `/proc/{pid}/stat` (jiffies since boot) — used for PID reuse detection
 - `config_digest`: SHA of `/etc/pve/qemu-server/{vmid}.conf`
 
 Cache entries are keyed by tap interface name and invalidated on inotify events for the conf file or on DELLINK.

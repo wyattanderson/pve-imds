@@ -3,7 +3,6 @@ package identity
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -17,7 +16,6 @@ import (
 
 	"github.com/wyattanderson/pve-imds/internal/tapwatch"
 	"github.com/wyattanderson/pve-imds/internal/vmconfig"
-	"github.com/wyattanderson/pve-imds/internal/vmproc"
 )
 
 // tapIfaceRe matches and captures vmid and netIndex from tap interface names.
@@ -26,30 +24,27 @@ var tapIfaceRe = regexp.MustCompile(`^tap(\d+)i(\d+)$`)
 // Resolver maintains the in-memory identity cache.
 //
 // It implements tapwatch.EventSink: Created events trigger populate and Deleted
-// events trigger invalidate. The Stage 4 file watcher calls ReloadConfig and
-// ReloadProcess directly when it detects file-system changes.
+// events trigger invalidate. The Stage 4 file watcher calls ReloadConfig
+// directly when it detects file-system changes.
 type Resolver struct {
-	fs      afero.Fs
-	tracker *vmproc.Tracker
-	log     *slog.Logger
-	node    string
+	fs   afero.Fs
+	log  *slog.Logger
+	node string
 
 	mu            sync.RWMutex
 	entries       map[string]*entry // key: ifname e.g. "tap100i0"
-	vmidToIfnames map[int][]string  // secondary index for config/PID reloads
+	vmidToIfnames map[int][]string  // secondary index for config reloads
 }
 
-// New returns a Resolver that reads VM config files from fs and process state
-// via tracker. It records the local hostname as the node name; if that fails,
-// New returns an error.
-func New(fs afero.Fs, tracker *vmproc.Tracker, log *slog.Logger) (*Resolver, error) {
+// New returns a Resolver that reads VM config files from fs. It records the
+// local hostname as the node name; if that fails, New returns an error.
+func New(fs afero.Fs, log *slog.Logger) (*Resolver, error) {
 	node, err := os.Hostname()
 	if err != nil {
 		return nil, fmt.Errorf("identity: resolve hostname: %w", err)
 	}
 	return &Resolver{
 		fs:            fs,
-		tracker:       tracker,
 		log:           log,
 		node:          node,
 		entries:       make(map[string]*entry),
@@ -63,9 +58,8 @@ func New(fs afero.Fs, tracker *vmproc.Tracker, log *slog.Logger) (*Resolver, err
 //  1. ifname is in the cache.
 //  2. ifindex matches the one recorded at population time.
 //  3. srcMAC matches the netN entry in the parsed config.
-//  4. The QEMU process start time still matches /proc/{pid}/stat.
 //
-// All four checks must pass; any failure returns a sentinel error.
+// All three checks must pass; any failure returns a sentinel error.
 func (r *Resolver) Lookup(ifname string, ifindex int32, srcMAC net.HardwareAddr) (*VMRecord, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -88,18 +82,12 @@ func (r *Resolver) Lookup(ifname string, ifindex int32, srcMAC net.HardwareAddr)
 		return nil, ErrMACMismatch
 	}
 
-	currentStartTime, err := r.tracker.ReadStartTime(e.processInfo.PID)
-	if err != nil || currentStartTime != e.processInfo.StartTime {
-		return nil, ErrProcessChanged
-	}
-
 	return &VMRecord{
-		Node:        r.node,
-		VMID:        e.vmid,
-		NetIndex:    e.netIndex,
-		IfIndex:     e.ifindex,
-		Config:      e.config,
-		ProcessInfo: e.processInfo,
+		Node:     r.node,
+		VMID:     e.vmid,
+		NetIndex: e.netIndex,
+		IfIndex:  e.ifindex,
+		Config:   e.config,
 	}, nil
 }
 
@@ -127,25 +115,6 @@ func (r *Resolver) ReloadConfig(vmid int) {
 	}
 }
 
-// ReloadProcess re-reads the PID and start time for vmid and updates all cache
-// entries that share it. Called by the Stage 4 file watcher on IN_CLOSE_WRITE
-// for a .pid file.
-func (r *Resolver) ReloadProcess(vmid int) {
-	proc, err := r.tracker.Lookup(vmid)
-	if err != nil {
-		r.log.Warn("identity: reload process: lookup failed", "vmid", vmid, "err", err)
-		return
-	}
-
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	for _, ifname := range r.vmidToIfnames[vmid] {
-		if e, ok := r.entries[ifname]; ok {
-			e.processInfo = proc
-		}
-	}
-}
-
 // HandleLinkEvent implements tapwatch.EventSink.
 func (r *Resolver) HandleLinkEvent(ctx context.Context, ev tapwatch.Event) {
 	switch ev.Type {
@@ -158,8 +127,8 @@ func (r *Resolver) HandleLinkEvent(ctx context.Context, ev tapwatch.Event) {
 	}
 }
 
-// populate reads the VM config and process state for the given tap interface
-// and inserts an entry into the cache. It is safe to call concurrently.
+// populate reads the VM config for the given tap interface and inserts an entry
+// into the cache. It is safe to call concurrently.
 func (r *Resolver) populate(ctx context.Context, ifname string, ifindex int32) error {
 	vmid, netIndex, err := parseIfname(ifname)
 	if err != nil {
@@ -175,29 +144,15 @@ func (r *Resolver) populate(ctx context.Context, ifname string, ifindex int32) e
 		return fmt.Errorf("parse config: %w", err)
 	}
 
-	proc, err := r.tracker.Lookup(vmid)
-	if err != nil {
-		if !errors.Is(err, os.ErrNotExist) {
-			return fmt.Errorf("lookup process: %w", err)
-		}
-		// PID file not yet written — PVE creates it after QEMU starts and the
-		// tap interface is already up. Store a zero ProcessInfo; the file
-		// watcher will call ReloadProcess once the PID file appears.
-		r.log.DebugContext(ctx, "identity: pid file not yet present, will update on inotify event",
-			"ifname", ifname, "vmid", vmid)
-	}
-
-	r.log.DebugContext(ctx, "identity: populating cache entry",
-		"ifname", ifname, "vmid", vmid, "pid", proc.PID)
+	r.log.DebugContext(ctx, "identity: populating cache entry", "ifname", ifname, "vmid", vmid)
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.entries[ifname] = &entry{
-		vmid:        vmid,
-		netIndex:    netIndex,
-		ifindex:     ifindex,
-		config:      cfg,
-		processInfo: proc,
+		vmid:     vmid,
+		netIndex: netIndex,
+		ifindex:  ifindex,
+		config:   cfg,
 	}
 	r.addIfname(vmid, ifname)
 
@@ -209,8 +164,7 @@ func (r *Resolver) populate(ctx context.Context, ifname string, ifindex int32) e
 // against a tap interface being deleted and recreated (with a new VM) before
 // the old per-interface Runtime has been torn down.
 //
-// Source MAC and process start-time are not checked because they are not
-// available at the HTTP handler layer.
+// Source MAC is not checked because it is not available at the HTTP handler layer.
 func (r *Resolver) RecordByName(ifname string, ifindex int32) (*VMRecord, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -222,12 +176,11 @@ func (r *Resolver) RecordByName(ifname string, ifindex int32) (*VMRecord, error)
 		return nil, ErrIfindexMismatch
 	}
 	return &VMRecord{
-		Node:        r.node,
-		VMID:        e.vmid,
-		NetIndex:    e.netIndex,
-		IfIndex:     e.ifindex,
-		Config:      e.config,
-		ProcessInfo: e.processInfo,
+		Node:     r.node,
+		VMID:     e.vmid,
+		NetIndex: e.netIndex,
+		IfIndex:  e.ifindex,
+		Config:   e.config,
 	}, nil
 }
 

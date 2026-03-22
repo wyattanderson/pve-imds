@@ -3,13 +3,11 @@
 // answering "who sent this packet?" during IMDS request handling.
 //
 // A record is populated when tapwatch reports a Created event for a tap
-// interface and evicted on a Deleted event. The Lookup method performs three
+// interface and evicted on a Deleted event. The Lookup method performs two
 // authenticity checks before returning a record:
 //
 //  1. The kernel ifindex must match the one recorded at population time.
 //  2. The source MAC must match the netN entry in the VM's config file.
-//  3. The QEMU process start time must still match /proc/{pid}/stat (PID-reuse
-//     guard: detects a VM restart even before the DELLINK event arrives).
 package identity
 
 import (
@@ -17,7 +15,6 @@ import (
 	"net"
 
 	"github.com/wyattanderson/pve-imds/internal/vmconfig"
-	"github.com/wyattanderson/pve-imds/internal/vmproc"
 )
 
 // VMRecord is the fully verified identity of a VM tap interface.
@@ -39,9 +36,6 @@ type VMRecord struct {
 	// Config is the parsed main section of /etc/pve/qemu-server/{vmid}.conf
 	// as it existed when the tap interface came up (or was last reloaded).
 	Config *vmconfig.VMConfig
-
-	// ProcessInfo is the (PID, StartTime) pair of the QEMU process.
-	ProcessInfo vmproc.ProcessInfo
 }
 
 // Provider is the interface consumed by the HTTP proxy layer to resolve VM
@@ -68,8 +62,4 @@ var (
 	// ErrMACMismatch is returned when the source MAC of the incoming packet
 	// does not match the MAC recorded in the VM's config.
 	ErrMACMismatch = errors.New("identity: source MAC does not match config")
-
-	// ErrProcessChanged is returned when the QEMU process start time no longer
-	// matches the cached value, indicating the VM was restarted.
-	ErrProcessChanged = errors.New("identity: process start time changed (VM restarted?)")
 )
