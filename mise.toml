@@ -1,0 +1,18 @@
+[settings]
+lockfile = true
+idiomatic_version_file_enable_tools = ["go"]
+
+[tasks.build]
+description = "Build all packages"
+run = "go build ./..."
+
+[tasks.test]
+description = "Run unit tests"
+run = "go test ./..."
+
+[tasks.test-conformance]
+description = "Run EC2 IMDS conformance suite (set CLOUD_INIT_DIR to override path)"
+dir = "tests/conformance"
+run = """
+PYTHONPATH=${CLOUD_INIT_DIR:-$HOME/git/cloud-init} uv run --project . pytest -v --tb=short .
+"""
