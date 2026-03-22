@@ -83,6 +83,10 @@ This allows unit tests to use fakes without kernel or Proxmox dependencies.
 
 The main daemon needs `CAP_NET_ADMIN` + `CAP_BPF` (or root) for XDP attachment. The metadata backend should run unprivileged and communicate only via a Unix socket. Do not conflate the two in a single process.
 
+## After every source file change
+
+Run `mise run lint` and fix all reported issues before considering the task done.
+
 ## What to avoid
 
 - Do not use `flag` package — use cobra/viper.

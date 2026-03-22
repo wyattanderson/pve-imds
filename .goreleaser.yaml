@@ -36,6 +36,14 @@ nfpms:
     formats:
       - deb
     bindir: /usr/sbin
+    contents:
+      - src: release/linux/usr/lib/systemd/system/pve-imds.service
+        dst: /usr/lib/systemd/system/pve-imds.service
+        file_info:
+          mode: 0644
+    scripts:
+      postinstall: release/scripts/deb/postinstall.sh
+      preremove: release/scripts/deb/preremove.sh
     deb:
       compression: zstd
 

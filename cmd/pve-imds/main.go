@@ -2,7 +2,9 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"net"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -104,6 +106,32 @@ func runServe(fxLogging bool) error {
 		fx.Invoke(tapwatch.Register),
 	)
 
-	app.Run()
-	return nil
+	startCtx, startCancel := context.WithTimeout(context.Background(), app.StartTimeout())
+	defer startCancel()
+	if err := app.Start(startCtx); err != nil {
+		return err
+	}
+
+	sdNotifyReady()
+
+	<-app.Done()
+
+	stopCtx, stopCancel := context.WithTimeout(context.Background(), app.StopTimeout())
+	defer stopCancel()
+	return app.Stop(stopCtx)
+}
+
+// sdNotifyReady sends READY=1 to the systemd notification socket, if present.
+// This implements the sd_notify(3) protocol for Type=notify services.
+func sdNotifyReady() {
+	socket := os.Getenv("NOTIFY_SOCKET")
+	if socket == "" {
+		return
+	}
+	conn, err := (&net.Dialer{}).DialContext(context.Background(), "unixgram", socket)
+	if err != nil {
+		return
+	}
+	defer func() { _ = conn.Close() }()
+	_, _ = conn.Write([]byte("READY=1"))
 }
