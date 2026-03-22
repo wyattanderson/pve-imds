@@ -1,30 +1,14 @@
 """
 EC2 IMDS conformance tests.
 
-These tests verify that cloud-init's DataSourceEc2 can successfully crawl our
-IMDS endpoint and parse the metadata we serve.  The suite is intentionally
-expected to FAIL against the initial plain-text handler — it is the failing
-red bar that drives the TDD implementation of the EC2-compatible handler.
-
-Expected failure modes before the EC2 handler is implemented:
-  - test_get_data_succeeds:      passes trivially (handler returns HTTP 200
-                                  for every path, so wait_for_url succeeds),
-                                  but the metadata assertions below fail
-                                  because instance-id / local-hostname are
-                                  absent from the scraped tree.
-  - test_instance_id:            fails — "instance-id" not in metadata.
-  - test_local_hostname:         fails — "local-hostname" not in metadata.
-  - test_userdata:               may pass or fail depending on how cloud-init
-                                  interprets the plain-text body as user-data.
-
-Once the EC2-compatible handler is implemented all assertions should pass.
+Verify that cloud-init's DataSourceEc2 can successfully crawl our IMDS
+endpoint and parse the metadata we serve.
 """
 
 from unittest import mock
 
 import pytest
 
-# cloud-init imports — path is injected by conftest.py
 from cloudinit import helpers
 from cloudinit.sources import DataSourceEc2 as ec2
 
@@ -94,13 +78,7 @@ class TestEc2Conformance:
     # ------------------------------------------------------------------
 
     def test_get_data_returns_true(self, ds):
-        """_get_data() must return True — the service must be reachable and
-        return parseable metadata.
-
-        EXPECTED FAILURE before EC2 handler: cloud-init reaches the server
-        (HTTP 200 for the probe path) but cannot parse valid EC2 metadata from
-        the plain-text response, so this assertion will fail.
-        """
+        """_get_data() must return True — service reachable, metadata parsed."""
         result = self._run_get_data(ds)
         assert result is True, (
             "DataSourceEc2._get_data() returned False — either the server was "
@@ -112,23 +90,23 @@ class TestEc2Conformance:
     # ------------------------------------------------------------------
 
     def test_instance_id(self, ds, imds_server):
-        """instance-id must be 'i-{vmid}'."""
+        """instance-id must be the Proxmox VMID as a decimal string."""
         self._run_get_data(ds)
         assert ds.metadata is not None, "metadata is None after _get_data()"
-        expected = f"i-{imds_server['vmid']}"
+        expected = str(imds_server["vmid"])
         assert ds.metadata.get("instance-id") == expected, (
             f"Expected instance-id={expected!r}, "
             f"got {ds.metadata.get('instance-id')!r}"
         )
 
     def test_local_hostname(self, ds, imds_server):
-        """local-hostname must contain the Proxmox node name."""
+        """local-hostname must be the VM name."""
         self._run_get_data(ds)
         assert ds.metadata is not None
-        hostname = ds.metadata.get("local-hostname", "")
-        assert imds_server["node"] in hostname, (
-            f"Expected node name {imds_server['node']!r} in "
-            f"local-hostname={hostname!r}"
+        expected = imds_server["vm_name"]
+        assert ds.metadata.get("local-hostname") == expected, (
+            f"Expected local-hostname={expected!r}, "
+            f"got {ds.metadata.get('local-hostname')!r}"
         )
 
     def test_instance_type(self, ds):
@@ -169,9 +147,9 @@ class TestEc2Conformance:
     # ------------------------------------------------------------------
 
     def test_get_instance_id(self, ds, imds_server):
-        """DataSource.get_instance_id() must return 'i-{vmid}'."""
+        """DataSource.get_instance_id() must return the Proxmox VMID."""
         self._run_get_data(ds)
-        expected = f"i-{imds_server['vmid']}"
+        expected = str(imds_server["vmid"])
         assert ds.get_instance_id() == expected, (
             f"get_instance_id() returned {ds.get_instance_id()!r}, "
             f"expected {expected!r}"

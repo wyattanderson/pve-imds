@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"strings"
 	"time"
 
 	"golang.org/x/sync/errgroup"
@@ -20,8 +21,21 @@ type Resolver interface {
 	RecordByName(ifname string, ifindex int32) (*identity.VMRecord, error)
 }
 
-// NewHandler returns an http.Handler that resolves the VM identity for the
-// given tap interface and writes a plain-text summary.
+// NewHandler returns an http.Handler that serves EC2-compatible IMDS responses
+// for the tap interface identified by name and ifindex.
+//
+// Each request is handled as follows:
+//  1. Resolve VM identity via resolver.RecordByName.
+//  2. Build an InstanceMetadata from the resolved VMRecord.
+//  3. Dispatch on the URL path category (meta-data, user-data).
+//
+// The URL path format is /{version}/{category}/..., e.g.:
+//
+//	GET /2009-04-04/meta-data/instance-id
+//	GET /latest/meta-data/
+//	GET /latest/user-data
+//
+// Any version string is accepted; all versions return the same data.
 func NewHandler(resolver Resolver, name string, ifindex int32) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		rec, err := resolver.RecordByName(name, ifindex)
@@ -29,21 +43,33 @@ func NewHandler(resolver Resolver, name string, ifindex int32) http.Handler {
 			http.Error(w, fmt.Sprintf("identity lookup failed: %v", err), http.StatusServiceUnavailable)
 			return
 		}
-		w.Header().Set("Content-Type", "text/plain")
-		fmt.Fprintf(w, "node:     %s\n", rec.Node)
-		fmt.Fprintf(w, "vmid:     %d\n", rec.VMID)
-		fmt.Fprintf(w, "netindex: %d\n", rec.NetIndex)
-		fmt.Fprintf(w, "pid:      %d\n", rec.ProcessInfo.PID)
-		fmt.Fprintf(w, "\n[vmconfig]\n")
-		fmt.Fprintf(w, "name:        %s\n", rec.Config.Name)
-		fmt.Fprintf(w, "ostype:      %s\n", rec.Config.OSType)
-		fmt.Fprintf(w, "description: %s\n", rec.Config.Description)
-		fmt.Fprintf(w, "tags:        %v\n", rec.Config.Tags)
-		for idx, dev := range rec.Config.Networks {
-			fmt.Fprintf(w, "net%d:        model=%s mac=%s bridge=%s\n", idx, dev.Model, dev.MAC, dev.Bridge)
+
+		// Path format: /{version}/{category}/...
+		//   parts[0] = ""           (before the leading slash)
+		//   parts[1] = version      ("2009-04-04", "latest", …)
+		//   parts[2] = category     ("meta-data", "user-data")
+		//   parts[3] = rest         (optional sub-path within category)
+		parts := strings.SplitN(req.URL.Path, "/", 4)
+		if len(parts) < 3 {
+			http.NotFound(w, req)
+			return
 		}
-		for k, v := range rec.Config.Raw {
-			fmt.Fprintf(w, "%s: %s\n", k, v)
+		category := parts[2]
+		var rest string
+		if len(parts) == 4 {
+			rest = parts[3]
+		}
+
+		switch category {
+		case "meta-data":
+			md := MetadataFromRecord(rec)
+			serveTree(w, rest, buildTree(md))
+		case "user-data":
+			// User-data is not yet implemented.
+			// Return 404 so cloud-init treats it as absent rather than erroring.
+			http.NotFound(w, req)
+		default:
+			http.NotFound(w, req)
 		}
 	})
 }
