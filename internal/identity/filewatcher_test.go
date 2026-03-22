@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
 	"github.com/wyattanderson/pve-imds/internal/tapwatch"
 	"github.com/wyattanderson/pve-imds/internal/vmproc"
 )

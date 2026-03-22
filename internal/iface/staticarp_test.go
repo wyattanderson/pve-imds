@@ -8,7 +8,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
 	"gvisor.dev/gvisor/pkg/buffer"
 	"gvisor.dev/gvisor/pkg/tcpip"
 	"gvisor.dev/gvisor/pkg/tcpip/header"
@@ -128,9 +127,9 @@ func addHeaderSrcMAC(t *testing.T, sarp *Endpoint) tcpip.LinkAddress {
 func TestStaticARPEndpoint_AddHeader_GatewayMAC(t *testing.T) {
 	sarp := newSARPEndpoint(t)
 
-	vmMAC  := tcpip.LinkAddress("\xaa\xbb\xcc\xdd\xee\xff")
-	gwMAC  := tcpip.LinkAddress("\x00\x11\x22\x33\x44\x55")
-	vmIP   := tcpip.AddrFrom4([4]byte{169, 254, 1, 1})
+	vmMAC := tcpip.LinkAddress("\xaa\xbb\xcc\xdd\xee\xff")
+	gwMAC := tcpip.LinkAddress("\x00\x11\x22\x33\x44\x55")
+	vmIP := tcpip.AddrFrom4([4]byte{169, 254, 1, 1})
 	imdsIP := tcpip.AddrFrom4([4]byte{169, 254, 169, 254})
 
 	sarp.DeliverNetworkPacket(ipv4.ProtocolNumber, makeInboundIPv4Pkt(t, vmMAC, gwMAC, vmIP, imdsIP))
@@ -144,9 +143,9 @@ func TestStaticARPEndpoint_AddHeader_GatewayMAC(t *testing.T) {
 func TestStaticARPEndpoint_AddHeader_ARPPath(t *testing.T) {
 	sarp := newSARPEndpoint(t)
 
-	vmMAC  := tcpip.LinkAddress("\xaa\xbb\xcc\xdd\xee\xff")
+	vmMAC := tcpip.LinkAddress("\xaa\xbb\xcc\xdd\xee\xff")
 	nicMAC := tcpip.LinkAddress("\x00\x00\x00\x00\x00\x02") // simulates tap NIC MAC after ARP
-	vmIP   := tcpip.AddrFrom4([4]byte{169, 254, 1, 1})
+	vmIP := tcpip.AddrFrom4([4]byte{169, 254, 1, 1})
 	imdsIP := tcpip.AddrFrom4([4]byte{169, 254, 169, 254})
 
 	sarp.DeliverNetworkPacket(ipv4.ProtocolNumber, makeInboundIPv4Pkt(t, vmMAC, nicMAC, vmIP, imdsIP))

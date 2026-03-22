@@ -14,6 +14,7 @@ import (
 	"sync"
 
 	"github.com/spf13/afero"
+
 	"github.com/wyattanderson/pve-imds/internal/tapwatch"
 	"github.com/wyattanderson/pve-imds/internal/vmconfig"
 	"github.com/wyattanderson/pve-imds/internal/vmproc"

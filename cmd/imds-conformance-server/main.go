@@ -70,12 +70,12 @@ func testRecord() *identity.VMRecord {
 
 // serverInfo is JSON-serialised to stdout on startup.
 type serverInfo struct {
-	Port     int    `json:"port"`
-	VMID     int    `json:"vmid"`
-	Node     string `json:"node"`
-	MAC      string `json:"mac"`
-	VMName   string `json:"vm_name"`
-	LocalIP  string `json:"local_ipv4"`
+	Port    int    `json:"port"`
+	VMID    int    `json:"vmid"`
+	Node    string `json:"node"`
+	MAC     string `json:"mac"`
+	VMName  string `json:"vm_name"`
+	LocalIP string `json:"local_ipv4"`
 }
 
 func main() {

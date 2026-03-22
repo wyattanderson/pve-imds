@@ -20,5 +20,8 @@ PYTHONPATH=${CLOUD_INIT_DIR:-$HOME/git/cloud-init} uv run --project . pytest -v 
 [tasks.lint]
 run = "golangci-lint run"
 
+[tasks.fmt]
+run = "golangci-lint fmt"
+
 [tools]
 golangci-lint = "latest"

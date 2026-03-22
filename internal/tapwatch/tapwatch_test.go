@@ -127,9 +127,9 @@ func TestScanEmitsTapInterfacesUp(t *testing.T) {
 		return []net.Interface{
 			{Index: 5, Name: "tap110i0", Flags: net.FlagUp},
 			{Index: 6, Name: "tap111i1", Flags: net.FlagUp},
-			{Index: 7, Name: "eth0", Flags: net.FlagUp},          // non-tap: skip
-			{Index: 8, Name: "tap112i0", Flags: 0},               // down: skip
-			{Index: 9, Name: "vmbr0", Flags: net.FlagUp},         // non-tap: skip
+			{Index: 7, Name: "eth0", Flags: net.FlagUp},           // non-tap: skip
+			{Index: 8, Name: "tap112i0", Flags: 0},                // down: skip
+			{Index: 9, Name: "vmbr0", Flags: net.FlagUp},          // non-tap: skip
 			{Index: 10, Name: "tapnotanumber", Flags: net.FlagUp}, // no digits: skip
 		}, nil
 	}

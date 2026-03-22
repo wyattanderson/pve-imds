@@ -14,15 +14,15 @@ import (
 // path relative to the meta-data root. The routing rules are:
 //
 //   - string field        — leaf at the given path; empty strings are omitted
-//                           (excluded from directory listings, return 404).
+//     (excluded from directory listings, return 404).
 //   - struct field        — directory at the given path; the struct's own
-//                           `imds`-tagged fields become its sub-paths.
+//     `imds`-tagged fields become its sub-paths.
 //   - map[string]string   — the tag must end with a {placeholder} segment.
-//                           The path before {placeholder} is a dynamic
-//                           directory whose children are the map keys and
-//                           whose leaf values are the map values.
+//     The path before {placeholder} is a dynamic
+//     directory whose children are the map keys and
+//     whose leaf values are the map values.
 //   - map[string]T        — same, but T is a struct whose own tags define the
-//                           sub-paths under each key.
+//     sub-paths under each key.
 //
 // Fields tagged `imds:"-"` are excluded entirely.
 type InstanceMetadata struct {

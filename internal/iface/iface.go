@@ -10,7 +10,6 @@ import (
 	"syscall"
 
 	"golang.org/x/sys/unix"
-
 	"gvisor.dev/gvisor/pkg/tcpip"
 	"gvisor.dev/gvisor/pkg/tcpip/adapters/gonet"
 	xdplink "gvisor.dev/gvisor/pkg/tcpip/link/xdp"
