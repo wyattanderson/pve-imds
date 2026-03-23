@@ -27,20 +27,22 @@ import (
 type Runtime struct {
 	log      *slog.Logger
 	resolver *identity.Resolver
+	server   imds.Server
 	ifindex  int32  // primary identifier
 	name     string // for logging/debugging only
 }
 
 // New constructs a Runtime for the given tap interface.
-func New(log *slog.Logger, resolver *identity.Resolver, ifindex int32, name string) *Runtime {
-	return &Runtime{log: log, resolver: resolver, ifindex: ifindex, name: name}
+func New(log *slog.Logger, resolver *identity.Resolver, server imds.Server, ifindex int32, name string) *Runtime {
+	return &Runtime{log: log, resolver: resolver, server: server, ifindex: ifindex, name: name}
 }
 
 // NewFactory returns a manager.RuntimeFactory that constructs a Runtime for
-// each tap interface, sharing the provided logger and identity resolver.
-func NewFactory(log *slog.Logger, resolver *identity.Resolver) manager.RuntimeFactory {
+// each tap interface, sharing the provided logger, identity resolver, and IMDS
+// server.
+func NewFactory(log *slog.Logger, resolver *identity.Resolver, server imds.Server) manager.RuntimeFactory {
 	return func(ifindex int32, name string) manager.InterfaceRuntime {
-		return New(log, resolver, ifindex, name)
+		return New(log, resolver, server, ifindex, name)
 	}
 }
 
@@ -92,5 +94,5 @@ func (r *Runtime) Run(ctx context.Context) error {
 	}
 	defer listener.Close() //nolint:errcheck
 
-	return imds.Serve(ctx, listener, imds.NewHandler(r.resolver, r.name, r.ifindex))
+	return imds.Serve(ctx, listener, r.server.NewHandler(r.resolver, r.name, r.ifindex))
 }

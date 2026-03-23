@@ -19,6 +19,7 @@ import (
 
 	"github.com/wyattanderson/pve-imds/internal/identity"
 	"github.com/wyattanderson/pve-imds/internal/imds"
+	"github.com/wyattanderson/pve-imds/internal/imds/ec2"
 	"github.com/wyattanderson/pve-imds/internal/vmconfig"
 )
 
@@ -96,7 +97,7 @@ func run() error {
 	port := ln.Addr().(*net.TCPAddr).Port
 	rec := testRecord()
 	resolver := &fakeResolver{rec}
-	handler := imds.NewHandler(resolver, "tap100i0", rec.IfIndex)
+	handler := ec2.NewServer().NewHandler(resolver, "tap100i0", rec.IfIndex)
 
 	mac := rec.Config.Networks[0].MAC.String()
 	info := serverInfo{

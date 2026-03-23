@@ -1,4 +1,4 @@
-package imds
+package ec2
 
 import (
 	"fmt"
