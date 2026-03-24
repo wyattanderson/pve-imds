@@ -19,6 +19,7 @@ import (
 	"github.com/wyattanderson/pve-imds/internal/iface"
 	"github.com/wyattanderson/pve-imds/internal/imds"
 	"github.com/wyattanderson/pve-imds/internal/imds/ec2"
+	"github.com/wyattanderson/pve-imds/internal/imds/openstack"
 	"github.com/wyattanderson/pve-imds/internal/logging"
 	"github.com/wyattanderson/pve-imds/internal/manager"
 	"github.com/wyattanderson/pve-imds/internal/tapwatch"
@@ -44,7 +45,7 @@ func newRootCmd() *cobra.Command {
 			return initConfig(cfgFile)
 		},
 		RunE: func(_ *cobra.Command, _ []string) error {
-			return runServe(fxLogging, pprofAddr, emulate)
+			return runServe(fxLogging, pprofAddr)
 		},
 	}
 
@@ -54,12 +55,15 @@ func newRootCmd() *cobra.Command {
 	pf.String("log-level", "info", "log level (debug, info, warn, error)")
 	pf.String("socket-path", "/run/pve-imds/meta.sock", "Unix socket path for metadata backend")
 	pf.StringVar(&pprofAddr, "pprof-addr", "", "address to serve pprof endpoints (e.g. localhost:6060); disabled if unset")
-	root.Flags().StringVar(&emulate, "emulate", "ec2", "IMDS emulation target (ec2)")
+	pf.StringVar(&emulate, "emulate", "ec2", "IMDS emulation target (ec2)")
 
 	if err := viper.BindPFlag("log_level", pf.Lookup("log-level")); err != nil {
 		panic(err)
 	}
 	if err := viper.BindPFlag("socket_path", pf.Lookup("socket-path")); err != nil {
+		panic(err)
+	}
+	if err := viper.BindPFlag("emulate", pf.Lookup("emulate")); err != nil {
 		panic(err)
 	}
 
@@ -74,6 +78,7 @@ func initConfig(cfgFile string) error {
 	def := config.Default()
 	viper.SetDefault("log_level", def.LogLevel)
 	viper.SetDefault("socket_path", def.SocketPath)
+	viper.SetDefault("emulate", "ec2")
 
 	if cfgFile == "" {
 		return nil
@@ -83,18 +88,20 @@ func initConfig(cfgFile string) error {
 	return viper.ReadInConfig()
 }
 
-func runServe(fxLogging bool, pprofAddr string, emulate string) error {
+func runServe(fxLogging bool, pprofAddr string) error {
 	var cfg config.Config
 	if err := viper.Unmarshal(&cfg); err != nil {
 		return fmt.Errorf("unmarshal config: %w", err)
 	}
 
 	var imdsServer imds.Server
-	switch emulate {
+	switch viper.GetString("emulate") {
 	case "ec2":
 		imdsServer = ec2.NewServer()
+	case "openstack":
+		imdsServer = openstack.NewServer()
 	default:
-		return fmt.Errorf("unsupported --emulate value %q (supported: ec2)", emulate)
+		return fmt.Errorf("unsupported --emulate value %q (supported: ec2, openstack)", viper.GetString("emulate"))
 	}
 
 	logger := logging.New(cfg.LogLevel)

@@ -1,16 +1,21 @@
-// Command imds-conformance-server is a test harness for the EC2 IMDS
-// conformance suite. It serves the imds.Handler over a random TCP port using
-// a hard-coded fake VM identity so that the Python conformance tests can drive
-// cloud-init's DataSourceEc2 against our real handler without any Proxmox
-// infrastructure.
+// Command imds-conformance-server is a test harness for the IMDS conformance
+// suites. It serves either an EC2-compatible or OpenStack-compatible IMDS over
+// a random TCP port using a hard-coded fake VM identity so that the Python
+// conformance tests can drive cloud-init's DataSource* implementations against
+// our real handlers without any Proxmox infrastructure.
 //
 // On startup it prints a single "ready {json}" line to stdout (then flushes)
 // so the test runner knows which port to connect to and what data to expect.
+//
+// Flags:
+//
+//	-emulate ec2|openstack   (default: ec2)
 package main
 
 import (
 	"context"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"net"
 	"os"
@@ -20,6 +25,7 @@ import (
 	"github.com/wyattanderson/pve-imds/internal/identity"
 	"github.com/wyattanderson/pve-imds/internal/imds"
 	"github.com/wyattanderson/pve-imds/internal/imds/ec2"
+	"github.com/wyattanderson/pve-imds/internal/imds/openstack"
 	"github.com/wyattanderson/pve-imds/internal/vmconfig"
 )
 
@@ -50,7 +56,7 @@ func testRecord() *identity.VMRecord {
 		Config: &vmconfig.VMConfig{
 			Name:        "conformance-vm",
 			OSType:      "l26",
-			Description: "Test VM for EC2 IMDS conformance",
+			Description: "Test VM for IMDS conformance",
 			Tags:        []string{"conformance"},
 			Networks: map[int]vmconfig.NetworkDevice{
 				0: {
@@ -85,6 +91,9 @@ func main() {
 }
 
 func run() error {
+	emulate := flag.String("emulate", "ec2", "IMDS emulation target: ec2 or openstack")
+	flag.Parse()
+
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
@@ -97,7 +106,18 @@ func run() error {
 	port := ln.Addr().(*net.TCPAddr).Port
 	rec := testRecord()
 	resolver := &fakeResolver{rec}
-	handler := ec2.NewServer().NewHandler(resolver, "tap100i0", rec.IfIndex)
+
+	var srv imds.Server
+	switch *emulate {
+	case "ec2":
+		srv = ec2.NewServer()
+	case "openstack":
+		srv = openstack.NewServer()
+	default:
+		return fmt.Errorf("unknown -emulate value %q: must be ec2 or openstack", *emulate)
+	}
+
+	handler := srv.NewHandler(resolver, "tap100i0", rec.IfIndex)
 
 	mac := rec.Config.Networks[0].MAC.String()
 	info := serverInfo{

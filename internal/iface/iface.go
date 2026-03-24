@@ -94,5 +94,7 @@ func (r *Runtime) Run(ctx context.Context) error {
 	}
 	defer listener.Close() //nolint:errcheck
 
-	return imds.Serve(ctx, listener, r.server.NewHandler(r.resolver, r.name, r.ifindex))
+	log := r.log.With("iface", r.name)
+	handler := imds.LoggingMiddleware(log, r.server.NewHandler(r.resolver, r.name, r.ifindex))
+	return imds.Serve(ctx, listener, handler)
 }
