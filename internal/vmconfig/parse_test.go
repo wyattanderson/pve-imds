@@ -191,6 +191,74 @@ func TestCommentDescriptionIndentation(t *testing.T) {
 	assert.Equal(t, want, cfg.Description)
 }
 
+// TestParseSMBIOS exercises parseSMBIOS directly.
+func TestParseSMBIOS(t *testing.T) {
+	cases := []struct {
+		name    string
+		input   string
+		want    map[string]string
+		wantErr bool
+	}{
+		{
+			name:  "uuid only",
+			input: "uuid=86f5aa5e-08a3-40cb-a642-efad20b5b061",
+			want:  map[string]string{"uuid": "86f5aa5e-08a3-40cb-a642-efad20b5b061"},
+		},
+		{
+			name:  "uuid with base64 product",
+			input: "uuid=86f5aa5e-08a3-40cb-a642-efad20b5b061,product=T3BlblN0YWNrIE5vdmE=,base64=1",
+			want: map[string]string{
+				"uuid":    "86f5aa5e-08a3-40cb-a642-efad20b5b061",
+				"product": "OpenStack Nova",
+			},
+		},
+		{
+			name:  "no base64 flag leaves values as-is",
+			input: "uuid=86f5aa5e-08a3-40cb-a642-efad20b5b061,product=OpenStack Nova",
+			want: map[string]string{
+				"uuid":    "86f5aa5e-08a3-40cb-a642-efad20b5b061",
+				"product": "OpenStack Nova",
+			},
+		},
+		{
+			name:    "invalid base64 value",
+			input:   "uuid=86f5aa5e-08a3-40cb-a642-efad20b5b061,product=!!!,base64=1",
+			wantErr: true,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := parseSMBIOS(tc.input)
+			if tc.wantErr {
+				assert.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, got)
+		})
+	}
+}
+
+// TestParseSMBIOS1Key verifies that a smbios1 config key is parsed into VMConfig.SMBIOS.
+func TestParseSMBIOS1Key(t *testing.T) {
+	raw := []byte("name: myvm\nsmbios1: uuid=86f5aa5e-08a3-40cb-a642-efad20b5b061,product=T3BlblN0YWNrIE5vdmE=,base64=1\n")
+	cfg, err := ParseConfig(raw)
+	require.NoError(t, err)
+
+	require.NotNil(t, cfg.SMBIOS)
+	assert.Equal(t, "86f5aa5e-08a3-40cb-a642-efad20b5b061", cfg.SMBIOS["uuid"])
+	assert.Equal(t, "OpenStack Nova", cfg.SMBIOS["product"])
+	assert.NotContains(t, cfg.Raw, "smbios1", "smbios1 must not appear in Raw")
+}
+
+// TestNoSMBIOS verifies that a config without smbios1 leaves VMConfig.SMBIOS nil.
+func TestNoSMBIOS(t *testing.T) {
+	raw := []byte("name: myvm\n")
+	cfg, err := ParseConfig(raw)
+	require.NoError(t, err)
+	assert.Nil(t, cfg.SMBIOS)
+}
+
 // TestMalformedNet verifies that a net entry with no '=' returns an error.
 func TestMalformedNet(t *testing.T) {
 	_, err := ParseConfig([]byte("net0: virtioNOEQUALS,bridge=vmbr0\n"))

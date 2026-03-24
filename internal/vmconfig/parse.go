@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"crypto/sha256"
+	"encoding/base64"
 	"fmt"
 	"net"
 	"net/url"
@@ -68,6 +69,12 @@ func ParseConfig(raw []byte) (*VMConfig, error) {
 			cfg.OSType = val
 		case "tags":
 			cfg.Tags = parseTags(val)
+		case "smbios1":
+			smbios, err := parseSMBIOS(val)
+			if err != nil {
+				return nil, fmt.Errorf("parse smbios1: %w", err)
+			}
+			cfg.SMBIOS = smbios
 		case "description":
 			// An explicit "description:" key overrides comment-accumulated lines.
 			// Proxmox percent-encodes the value (e.g. %3A for ':', %0A for newline).
@@ -106,6 +113,41 @@ func ParseConfig(raw []byte) (*VMConfig, error) {
 	}
 
 	return cfg, nil
+}
+
+// parseSMBIOS parses the value of the "smbios1" config key into a map of
+// field names to values. When the value ends with ",base64=1", all fields
+// except "uuid" are base64-decoded. The "base64" pseudo-field itself is not
+// included in the returned map.
+//
+// Example input:
+//
+//	uuid=86f5aa5e-08a3-40cb-a642-efad20b5b061,product=T3BlblN0YWNrIE5vdmE=,base64=1
+func parseSMBIOS(val string) (map[string]string, error) {
+	parts := strings.Split(val, ",")
+
+	isBase64 := len(parts) > 0 && parts[len(parts)-1] == "base64=1"
+
+	result := make(map[string]string)
+	for _, part := range parts {
+		k, v, ok := strings.Cut(part, "=")
+		if !ok {
+			continue
+		}
+		if k == "base64" {
+			continue
+		}
+		if isBase64 && k != "uuid" {
+			decoded, err := base64.StdEncoding.DecodeString(v)
+			if err != nil {
+				return nil, fmt.Errorf("base64 decode %s: %w", k, err)
+			}
+			result[k] = string(decoded)
+		} else {
+			result[k] = v
+		}
+	}
+	return result, nil
 }
 
 // parseTags splits a semicolon-separated tag string into a []string.

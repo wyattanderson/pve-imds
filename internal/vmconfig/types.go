@@ -35,8 +35,14 @@ type VMConfig struct {
 	// in "netN"). A VM with net0 and net1 will have entries at keys 0 and 1.
 	Networks map[int]NetworkDevice
 
+	// SMBIOS holds the parsed and decoded fields from the "smbios1" key.
+	// Keys present: "uuid", "product", and any other smbios1 sub-fields.
+	// Fields other than "uuid" are base64-decoded when "base64=1" is set in
+	// the config value. Nil if no "smbios1" key is present.
+	SMBIOS map[string]string
+
 	// Raw holds key→value pairs from the main section for keys that are not
-	// explicitly typed above (e.g. "cores", "memory", "scsi0", "smbios1").
+	// explicitly typed above (e.g. "cores", "memory", "scsi0").
 	// Keys present in the typed fields above are NOT duplicated here.
 	Raw map[string]string
 }

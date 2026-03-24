@@ -2,6 +2,7 @@ package openstack
 
 import (
 	"fmt"
+	"log/slog"
 	"sort"
 	"strconv"
 
@@ -103,8 +104,15 @@ func metadataFromRecord(rec *identity.VMRecord) MetaData {
 		meta[t] = ""
 	}
 
+	uuid := rec.Config.SMBIOS["uuid"]
+	if uuid == "" {
+		slog.Warn("smbios1 uuid not found in VM config, falling back to VMID",
+			"vmid", rec.VMID, "node", rec.Node)
+		uuid = strconv.Itoa(rec.VMID)
+	}
+
 	return MetaData{
-		UUID:             strconv.Itoa(rec.VMID),
+		UUID:             uuid,
 		Name:             rec.Config.Name,
 		Hostname:         rec.Config.Name,
 		AvailabilityZone: rec.Node,

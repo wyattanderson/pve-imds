@@ -120,7 +120,8 @@ func TestFileListing(t *testing.T) {
 // meta_data.json
 // ---------------------------------------------------------------------------
 
-func TestMetaDataUUID(t *testing.T) {
+func TestMetaDataUUIDFallback(t *testing.T) {
+	// testRecord has no SMBIOS; must fall back to the VMID.
 	resp := get(t, testRecord(), "/openstack/latest/meta_data.json")
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	assert.Equal(t, "application/json", resp.Header.Get("Content-Type"))
@@ -128,7 +129,23 @@ func TestMetaDataUUID(t *testing.T) {
 	var md MetaData
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&md))
 
-	assert.Equal(t, "100", md.UUID, "uuid must be the VMID")
+	assert.Equal(t, "100", md.UUID, "uuid must fall back to VMID when smbios1 uuid is absent")
+}
+
+func TestMetaDataUUIDFromSMBIOS(t *testing.T) {
+	rec := testRecord()
+	rec.Config.SMBIOS = map[string]string{
+		"uuid":    "86f5aa5e-08a3-40cb-a642-efad20b5b061",
+		"product": "OpenStack Nova",
+	}
+
+	resp := get(t, rec, "/openstack/latest/meta_data.json")
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	var md MetaData
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&md))
+
+	assert.Equal(t, "86f5aa5e-08a3-40cb-a642-efad20b5b061", md.UUID)
 }
 
 func TestMetaDataHostname(t *testing.T) {
