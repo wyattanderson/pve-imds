@@ -232,7 +232,7 @@ func (w *Watcher) process(msg netlink.Message) (Event, bool) {
 		}
 	}
 
-	if name == "" {
+	if name == "" || !tapIfaceRe.MatchString(name) {
 		return Event{}, false
 	}
 
