@@ -12,8 +12,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Cache apt packages
+        uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+        with:
+          path: |
+            /var/cache/apt/archives
+            /var/lib/apt/lists
+          key: apt-${{ runner.os }}-${{ hashFiles('.github/apt-packages.txt') }}
       - name: Install eBPF build dependencies
-        run: sudo apt-get install -y --no-install-recommends llvm clang libbpf-dev linux-headers-amd64
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y --no-install-recommends $(cat .github/apt-packages.txt)
       - uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
       - run: goreleaser build --snapshot
       - run: mise run lint

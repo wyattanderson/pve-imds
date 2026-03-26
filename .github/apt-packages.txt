@@ -1,0 +1,4 @@
+clang
+libbpf-dev
+linux-headers-amd64
+llvm
