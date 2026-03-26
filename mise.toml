@@ -19,7 +19,7 @@ PYTHONPATH=${CLOUD_INIT_DIR:-$HOME/git/cloud-init} uv run --project . pytest -v 
 
 [tasks.generate]
 description = "Run go generate for XDP bindings"
-run = "go generate ./internal/xdp/..."
+run = "go generate -tags ignore ./internal/xdp/..."
 
 [tasks.lint]
 run = "golangci-lint run"
@@ -29,6 +29,9 @@ run = "golangci-lint fmt"
 
 [tasks.snapshot]
 run = "goreleaser release --snapshot --clean"
+
+[tasks.pinata]
+run = "pinata .github/workflows"
 
 [tools]
 "go:github.com/goreleaser/goreleaser/v2" = "latest"
