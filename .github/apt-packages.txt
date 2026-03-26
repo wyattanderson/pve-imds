@@ -1,4 +1,5 @@
 clang
+gcc-multilib
 libbpf-dev
 linux-headers-generic
 llvm
