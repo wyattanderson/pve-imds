@@ -32,6 +32,10 @@ url = "https://dl.google.com/go/go1.26.1.darwin-amd64.tar.gz"
 checksum = "sha256:9b68112c913f45b7aebbf13c036721264bbba7e03a642f8f7490c561eebd1ecc"
 url = "https://dl.google.com/go/go1.26.1.windows-amd64.zip"
 
+[[tools."go:github.com/caarlos0/pinata"]]
+version = "0.3.4"
+backend = "go:github.com/caarlos0/pinata"
+
 [[tools."go:github.com/goreleaser/goreleaser/v2"]]
 version = "2.14.3"
 backend = "go:github.com/goreleaser/goreleaser/v2"
