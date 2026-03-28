@@ -33,9 +33,18 @@ run = "goreleaser release --snapshot --clean"
 [tasks.pinata]
 run = "pinata .github/workflows"
 
+[tasks.tag-release]
+description = "Tag the next semantic version and push to origin"
+run = """
+tag=$(svu next)
+git tag "$tag"
+git push origin "$tag"
+"""
+
 [tools]
 "go:github.com/goreleaser/goreleaser/v2" = "latest"
 "go:github.com/caarlos0/pinata" = "latest"
+"go:github.com/caarlos0/svu" = "latest"
 golangci-lint = "latest"
 python = "latest"
 uv = "latest"
