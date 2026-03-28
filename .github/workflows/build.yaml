@@ -21,7 +21,11 @@ jobs:
         with:
           path: |
             /var/cache/apt/archives
+            !/var/cache/apt/archives/lock
+            !/var/cache/apt/archives/partial
             /var/lib/apt/lists
+            !/var/lib/apt/lists/lock
+            !/var/lib/apt/lists/partial
           key: apt-${{ runner.os }}-${{ hashFiles('.github/apt-packages.txt') }}
       - name: Install eBPF build dependencies
         run: |
