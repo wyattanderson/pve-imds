@@ -32,10 +32,6 @@ func main() {
 
 func newRootCmd() *cobra.Command {
 	var cfgFile string
-	var fxLogging bool
-	var pprofAddr string
-	var metricsAddr string
-	var emulate string
 
 	root := &cobra.Command{
 		Use:   "pve-imds",
@@ -44,22 +40,19 @@ func newRootCmd() *cobra.Command {
 			return initConfig(cfgFile)
 		},
 		RunE: func(_ *cobra.Command, _ []string) error {
-			return runServe(fxLogging, pprofAddr, metricsAddr)
+			return runServe()
 		},
 	}
 
 	pf := root.PersistentFlags()
 	pf.StringVar(&cfgFile, "config", "", "config file (default: /etc/pve-imds/config.yaml)")
-	pf.BoolVar(&fxLogging, "fx-logging", false, "enable fx lifecycle logging")
-	pf.String("log-level", "info", "log level (debug, info, warn, error)")
-	pf.StringVar(&pprofAddr, "pprof-addr", "", "address to serve pprof endpoints (e.g. localhost:6060); disabled if unset")
-	pf.StringVar(&metricsAddr, "metrics-addr", "", "address to serve Prometheus metrics (e.g. :9100); disabled if unset")
-	pf.StringVar(&emulate, "emulate", "openstack", "IMDS emulation target (openstack)")
+	pf.Bool("fx_logging", false, "enable fx lifecycle logging")
+	pf.String("log_level", "info", "log level (debug, info, warn, error)")
+	pf.String("pprof_addr", "", "address to serve pprof endpoints (e.g. localhost:6060); disabled if unset")
+	pf.String("metrics_addr", "", "address to serve Prometheus metrics (e.g. :9100); disabled if unset")
+	pf.String("emulate", "ec2", "IMDS emulation target (ec2, openstack)")
 
-	if err := viper.BindPFlag("log_level", pf.Lookup("log-level")); err != nil {
-		panic(err)
-	}
-	if err := viper.BindPFlag("emulate", pf.Lookup("emulate")); err != nil {
+	if err := viper.BindPFlags(pf); err != nil {
 		panic(err)
 	}
 
@@ -70,10 +63,9 @@ func initConfig(cfgFile string) error {
 	viper.SetEnvPrefix("PVE_IMDS")
 	viper.AutomaticEnv()
 
-	// Set defaults from our config struct.
 	def := config.Default()
 	viper.SetDefault("log_level", def.LogLevel)
-	viper.SetDefault("emulate", "ec2")
+	viper.SetDefault("emulate", def.Emulate)
 
 	if cfgFile == "" {
 		return nil
@@ -83,35 +75,35 @@ func initConfig(cfgFile string) error {
 	return viper.ReadInConfig()
 }
 
-func runServe(fxLogging bool, pprofAddr, metricsAddr string) error {
+func runServe() error {
 	var cfg config.Config
 	if err := viper.Unmarshal(&cfg); err != nil {
 		return fmt.Errorf("unmarshal config: %w", err)
 	}
 
 	var imdsServer imds.Server
-	switch viper.GetString("emulate") {
+	switch cfg.Emulate {
 	case "ec2":
 		imdsServer = ec2.NewServer()
 	case "openstack":
 		imdsServer = openstack.NewServer()
 	default:
-		return fmt.Errorf("unsupported --emulate value %q (supported: ec2, openstack)", viper.GetString("emulate"))
+		return fmt.Errorf("unsupported --emulate value %q (supported: ec2, openstack)", cfg.Emulate)
 	}
 
 	logger := logging.New(cfg.LogLevel)
 
 	fxLogger := fx.NopLogger
-	if fxLogging {
+	if cfg.FxLogging {
 		fxLogger = fx.WithLogger(func() fxevent.Logger { return &fxevent.SlogLogger{Logger: logger} })
 	}
 
 	var opts []fx.Option
-	if pprofAddr != "" {
-		opts = append(opts, pprofOption(pprofAddr))
+	if cfg.PprofAddr != "" {
+		opts = append(opts, pprofOption(cfg.PprofAddr))
 	}
-	if metricsAddr != "" {
-		opts = append(opts, metricsOption(metricsAddr))
+	if cfg.MetricsAddr != "" {
+		opts = append(opts, metricsOption(cfg.MetricsAddr))
 	}
 
 	app := fx.New(
