@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"runtime/debug"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -22,6 +23,9 @@ import (
 	"github.com/wyattanderson/pve-imds/internal/manager"
 	"github.com/wyattanderson/pve-imds/internal/tapwatch"
 )
+
+// version is set at build time via -ldflags "-X main.version=<ver>".
+var version = "dev"
 
 func main() {
 	if err := newRootCmd().Execute(); err != nil {
@@ -92,6 +96,24 @@ func runServe() error {
 	}
 
 	logger := logging.New(cfg.LogLevel)
+
+	if info, ok := debug.ReadBuildInfo(); ok {
+		var revision, buildTime string
+		for _, s := range info.Settings {
+			switch s.Key {
+			case "vcs.revision":
+				revision = s.Value
+			case "vcs.time":
+				buildTime = s.Value
+			}
+		}
+		logger.Info("starting pve-imds",
+			"version", version,
+			"go", info.GoVersion,
+			"revision", revision,
+			"built", buildTime,
+		)
+	}
 
 	fxLogger := fx.NopLogger
 	if cfg.FxLogging {

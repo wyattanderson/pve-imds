@@ -14,7 +14,9 @@ before:
     - mise run generate
 
 builds:
-  - main: ./cmd/pve-imds 
+  - main: ./cmd/pve-imds
+    ldflags:
+      - -X main.version={{.Version}}
     goos:
       - linux
     goarch:
@@ -33,8 +35,15 @@ archives:
 
 nfpms:
   - maintainer: Wyatt Anderson <wanderson@gmail.com>
+    license: MIT
+    homepage: https://github.com/wyattanderson/pve-imds
+    description: >-
+      An OpenStack and EC2 IMDS (Instance Metadata Service) compatible metadata
+      service for virtual machines running in Proxmox.
     formats:
       - deb
+    suggests:
+      - proxmox-ve
     bindir: /usr/sbin
     contents:
       - src: release/linux/usr/lib/systemd/system/pve-imds.service

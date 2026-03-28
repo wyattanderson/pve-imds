@@ -1,8 +1,0 @@
-- deb packaging
-- release process, repo
-- golangci-lint
-- profiling
-- metrics
-- static config for region/AZ etc.
-- rate limiting
-- root (/) index page

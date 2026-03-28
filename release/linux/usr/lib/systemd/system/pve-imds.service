@@ -1,5 +1,5 @@
 [Unit]
-Description=Proxmox VE AWS IMDS-compatible metadata service
+Description=Proxmox VE IMDS server
 Documentation=https://github.com/wyattanderson/pve-imds
 Before=pveproxy.service
 After=network-online.target
