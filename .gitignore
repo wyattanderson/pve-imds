@@ -1,2 +1,4 @@
 internal/xdp/*.o
+internal/xdp/*_bpfeb.go
+internal/xdp/*_bpfel.go
 dist/
