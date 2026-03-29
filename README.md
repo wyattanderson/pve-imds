@@ -4,6 +4,61 @@ An OpenStack and EC2 IMDS (Instance Metadata Service) compatible metadata servic
 
 With `pve-imds`, an unmodified Linux [cloud image](https://cloud-images.ubuntu.com/) running [cloud-init](https://docs.cloud-init.io/en/latest/explanation/introduction.html) can reach `http://169.254.169.254` to retrieve not only instance metadata but also **custom [user data](https://docs.cloud-init.io/en/latest/explanation/format/index.html)** stored in the Proxmox VM *Notes* field. Eventually, `pve-imds` will also support a **signed identity document** that a VM can use to authenticate to a service like Vault.
 
+## Quick start
+
+1. Download the [latest release](https://github.com/wyattanderson/pve-imds/releases/latest) of `pve-imds` and install it. This snippet will fetch the latest `.deb` package artifact URL from the GitHub API, download, and install it. It's all here for the sake of transparency over a `curl ... | sudo bash` alternative.
+
+```bash
+# Protip: hit the ⧉ button to copy to the clipboard then paste the whole command.
+SUDO=$(command -v sudo >/dev/null 2>&1 && echo sudo || echo '') && \
+tmp=$(mktemp --suffix=.deb) && \
+curl -fL "$(curl -fsSL https://api.github.com/repos/wyattanderson/pve-imds/releases/latest \
+    | python3 -c 'import sys,json;print(next(a["browser_download_url"] for a in json.load(sys.stdin)["assets"] if a["name"].endswith(".deb")))')" -o "$tmp" && \
+$SUDO dpkg -i "$tmp" && \
+rm -f "$tmp"
+```
+
+2. Download the latest cloud image from your distribution of choice. Here, we'll use Ubuntu 24.04 LTS:
+
+```bash
+curl -LO https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.img
+```
+
+3. Import the cloud image as a new VM template. Substitute `local-lvm` and `vmbr0` with your storage and bridge interface of choice. The `--smbios1` configuration is necessary in order to convince `cloud-init` to look out over the network for configuration instead of expecting a CDROM.
+
+```bash
+qm create $(pvesh get /cluster/nextid) \
+    --name noble-server-cloudimg-amd64 \
+    --agent enabled=1 \
+    --cpu cputype=host \
+    --memory 2048 \
+    --scsi0 local-lvm:0,import-from=$(pwd)/noble-server-cloudimg-amd64.img \
+    --scsihw virtio-scsi-single \
+    --smbios1 base64=1,product=$(echo -n 'OpenStack Nova' | base64) \
+    --template 1 \
+    --storage local-lvm \
+    --net0 bridge=vmbr0,model=virtio
+```
+
+4. Note the VM ID of your new template. Set some user data and clone your template into a new VM:
+
+```bash
+cat << EOF > user-data
+#cloud-config
+package_update: true
+packages:
+  - qemu-guest-agent
+ssh_authorized_keys:
+  # replace this with your own SSH public key
+  - ssh-ed25519 AAAAC3NzaC1lZ...
+EOF
+
+# pve-imds reads user data from the contents 
+qm clone <TEMPLATE VMID> $(pvesh get /cluster/nextid) --description "$(echo '<!--#user-data'; cat user-data; echo '-->')" --name "my-test-vm"
+```
+
+5. Boot your new VM and try SSHing in.
+
 ## Why not use the cloud-init support built-in to Proxmox?
 
 Custom user data affords an incredibly powerful way to provision machines with `cloud-init`. It is extensively customizable and is an industry-standard method for complete unattended provisioning of machines.
