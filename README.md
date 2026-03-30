@@ -24,7 +24,10 @@ rm -f "$tmp"
 curl -LO https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.img
 ```
 
-3. Import the cloud image as a new VM template. Substitute `local-lvm` and `vmbr0` with your storage and bridge interface of choice. The `--smbios1` configuration is necessary in order to convince `cloud-init` to look out over the network for configuration instead of expecting a CDROM.
+3. Import the cloud image as a new VM template. Substitute `local-lvm` and `vmbr0` with your storage and bridge interface of choice.
+
+> [!NOTE]
+> The `--smbios1` configuration is necessary in order to convince `cloud-init` to look out over the network for configuration instead of expecting a CDROM.
 
 ```bash
 qm create $(pvesh get /cluster/nextid) \
@@ -59,7 +62,11 @@ EOF
 qm clone <TEMPLATE VMID> $(pvesh get /cluster/nextid) --description "$(echo '<!--#user-data'; cat user-data; echo '-->')" --name "my-test-vm"
 ```
 
-5. Boot your new VM, look for the IP as reported by `qemu-guest-agent`, and try SSHing in.
+5. Boot your new VM, look for the IP as reported by `qemu-guest-agent`, and try SSHing in. Verify that everything is working:
+
+```bash
+curl http://169.254.169.254/openstack/latest/meta_data.json
+```
 
 ## Why not use the cloud-init support built-in to Proxmox?
 
