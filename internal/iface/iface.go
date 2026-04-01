@@ -27,6 +27,10 @@ import (
 	"github.com/wyattanderson/pve-imds/internal/xdp"
 )
 
+// ctxHandlerKey is the context key used to store the matched mux pattern so
+// that the promhttp metrics middleware can read it as a per-request label.
+type ctxHandlerKey struct{}
+
 var (
 	ifaceInFlight = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "pve_imds_http_in_flight_requests",
@@ -35,14 +39,14 @@ var (
 
 	ifaceDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "pve_imds_http_request_duration_seconds",
-		Help:    "HTTP request latency by interface and status code class.",
+		Help:    "HTTP request latency by interface, handler, and status code.",
 		Buckets: prometheus.DefBuckets,
-	}, []string{"interface", "code"})
+	}, []string{"interface", "code", "handler"})
 
 	ifaceRequests = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "pve_imds_http_requests_total",
-		Help: "Total HTTP requests served, by interface and status code class.",
-	}, []string{"interface", "code"})
+		Help: "Total HTTP requests served, by interface, handler, and status code.",
+	}, []string{"interface", "code", "handler"})
 )
 
 // Runtime is the per-interface worker. It sets up an AF_XDP socket, attaches
@@ -127,13 +131,38 @@ func (r *Runtime) Run(ctx context.Context) error {
 	mux.HandleFunc("GET /.well-known/jwks.json", jwtsvid.NewJWKSHandler(r.signer.NodesDir(), log))
 	mux.Handle("/", base)
 
+	// handlerLabel is a promhttp option that reads the matched mux pattern from
+	// the request context, where routeLabeled stores it before each request.
+	handlerLabel := promhttp.WithLabelFromCtx("handler", func(ctx context.Context) string {
+		v, _ := ctx.Value(ctxHandlerKey{}).(string)
+		return v
+	})
+
+	// routeLabeled wraps h by peeking at the mux routing to store the matched
+	// pattern in the request context before calling h. This must sit outside
+	// the promhttp instrumentation wrappers so that InstrumentHandlerDuration
+	// and InstrumentHandlerCounter receive a request whose context already
+	// contains the handler label — they read context after the inner handler
+	// returns, not from any modified copy created inside.
+	routeLabeled := func(h http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_, pattern := mux.Handler(r)
+			ctx := context.WithValue(r.Context(), ctxHandlerKey{}, pattern)
+			h.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
+
 	instrumented := promhttp.InstrumentHandlerInFlight(
 		ifaceInFlight.With(labels),
-		promhttp.InstrumentHandlerDuration(
-			ifaceDuration.MustCurryWith(labels),
-			promhttp.InstrumentHandlerCounter(
-				ifaceRequests.MustCurryWith(labels),
-				mux,
+		routeLabeled(
+			promhttp.InstrumentHandlerDuration(
+				ifaceDuration.MustCurryWith(labels),
+				promhttp.InstrumentHandlerCounter(
+					ifaceRequests.MustCurryWith(labels),
+					mux,
+					handlerLabel,
+				),
+				handlerLabel,
 			),
 		),
 	)
