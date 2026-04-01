@@ -18,6 +18,7 @@ import (
 	"github.com/wyattanderson/pve-imds/internal/iface"
 	"github.com/wyattanderson/pve-imds/internal/imds"
 	"github.com/wyattanderson/pve-imds/internal/imds/ec2"
+	"github.com/wyattanderson/pve-imds/internal/imds/jwtsvid"
 	"github.com/wyattanderson/pve-imds/internal/imds/openstack"
 	"github.com/wyattanderson/pve-imds/internal/logging"
 	"github.com/wyattanderson/pve-imds/internal/manager"
@@ -70,6 +71,10 @@ func initConfig(cfgFile string) error {
 	def := config.Default()
 	viper.SetDefault("log_level", def.LogLevel)
 	viper.SetDefault("emulate", def.Emulate)
+	viper.SetDefault("jwtsvid.private_key_path", def.JWTSVID.PrivateKeyPath)
+	viper.SetDefault("jwtsvid.token_ttl", def.JWTSVID.TokenTTL)
+	viper.SetDefault("jwtsvid.nodes_dir", def.JWTSVID.NodesDir)
+	viper.SetDefault("jwtsvid.trust_domain", def.JWTSVID.TrustDomain)
 
 	if cfgFile == "" {
 		return nil
@@ -133,6 +138,9 @@ func runServe() error {
 		fx.Supply(logger),
 		fxLogger,
 		fx.Provide(func() imds.Server { return imdsServer }),
+		fx.Provide(func(cfg config.Config) (*jwtsvid.Signer, error) {
+			return jwtsvid.NewSigner(cfg.JWTSVID)
+		}),
 		fx.Provide(tapwatch.NewNetlinkConn),
 		fx.Provide(tapwatch.New),
 		fx.Provide(iface.NewFactory),

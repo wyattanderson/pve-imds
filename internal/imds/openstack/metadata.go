@@ -94,8 +94,8 @@ type Service struct {
 	Address string `json:"address"`
 }
 
-// metadataFromRecord builds a MetaData document from a resolved VMRecord.
-func metadataFromRecord(rec *identity.VMRecord) MetaData {
+// MetadataFromRecord builds a MetaData document from a resolved VMRecord.
+func MetadataFromRecord(rec *identity.VMRecord) MetaData {
 	meta := map[string]string{
 		"pve:vmid": strconv.Itoa(rec.VMID),
 		"pve:node": rec.Node,

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"net/http"
 	"syscall"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -21,6 +22,7 @@ import (
 
 	"github.com/wyattanderson/pve-imds/internal/identity"
 	"github.com/wyattanderson/pve-imds/internal/imds"
+	"github.com/wyattanderson/pve-imds/internal/imds/jwtsvid"
 	"github.com/wyattanderson/pve-imds/internal/manager"
 	"github.com/wyattanderson/pve-imds/internal/xdp"
 )
@@ -49,21 +51,22 @@ type Runtime struct {
 	log      *slog.Logger
 	resolver *identity.Resolver
 	server   imds.Server
+	signer   *jwtsvid.Signer
 	ifindex  int32  // primary identifier
 	name     string // for logging/debugging only
 }
 
 // New constructs a Runtime for the given tap interface.
-func New(log *slog.Logger, resolver *identity.Resolver, server imds.Server, ifindex int32, name string) *Runtime {
-	return &Runtime{log: log, resolver: resolver, server: server, ifindex: ifindex, name: name}
+func New(log *slog.Logger, resolver *identity.Resolver, server imds.Server, signer *jwtsvid.Signer, ifindex int32, name string) *Runtime {
+	return &Runtime{log: log, resolver: resolver, server: server, signer: signer, ifindex: ifindex, name: name}
 }
 
 // NewFactory returns a manager.RuntimeFactory that constructs a Runtime for
-// each tap interface, sharing the provided logger, identity resolver, and IMDS
-// server.
-func NewFactory(log *slog.Logger, resolver *identity.Resolver, server imds.Server) manager.RuntimeFactory {
+// each tap interface, sharing the provided logger, identity resolver, IMDS
+// server, and JWT-SVID signer.
+func NewFactory(log *slog.Logger, resolver *identity.Resolver, server imds.Server, signer *jwtsvid.Signer) manager.RuntimeFactory {
 	return func(ifindex int32, name string) manager.InterfaceRuntime {
-		return New(log, resolver, server, ifindex, name)
+		return New(log, resolver, server, signer, ifindex, name)
 	}
 }
 
@@ -118,13 +121,19 @@ func (r *Runtime) Run(ctx context.Context) error {
 	log := r.log.With("iface", r.name)
 	labels := prometheus.Labels{"interface": r.name}
 	base := r.server.NewHandler(r.resolver, r.name, r.ifindex)
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /pve-imds/jwtsvid", jwtsvid.NewIssueHandler(r.signer, r.resolver, r.name, r.ifindex))
+	mux.HandleFunc("GET /.well-known/jwks.json", jwtsvid.NewJWKSHandler(r.signer.NodesDir(), log))
+	mux.Handle("/", base)
+
 	instrumented := promhttp.InstrumentHandlerInFlight(
 		ifaceInFlight.With(labels),
 		promhttp.InstrumentHandlerDuration(
 			ifaceDuration.MustCurryWith(labels),
 			promhttp.InstrumentHandlerCounter(
 				ifaceRequests.MustCurryWith(labels),
-				base,
+				mux,
 			),
 		),
 	)

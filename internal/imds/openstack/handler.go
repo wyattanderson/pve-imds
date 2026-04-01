@@ -99,7 +99,7 @@ func (s *server) NewHandler(resolver imds.Resolver, name string, ifindex int32) 
 func serveFile(w http.ResponseWriter, req *http.Request, rec *identity.VMRecord, file string) {
 	switch file {
 	case "meta_data.json":
-		serveJSON(w, metadataFromRecord(rec))
+		serveJSON(w, MetadataFromRecord(rec))
 
 	case "network_data.json":
 		serveJSON(w, networkDataFromRecord(rec))
