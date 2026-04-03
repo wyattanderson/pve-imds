@@ -68,6 +68,10 @@ qm clone <TEMPLATE VMID> $(pvesh get /cluster/nextid) --description "$(echo '<!-
 curl http://169.254.169.254/openstack/latest/meta_data.json
 ```
 
+## Why network-based configuration?
+
+The ISO image approach that Proxmox uses (and that I used before this by generating my own ISO images with my own user data) isn't dynamic. With this approach, metadata is up-to-date immediately. Change a tag? Add user data? Immediately visible in the instance without regenerating the image.
+
 ## Why not use the cloud-init support built-in to Proxmox?
 
 Custom user data affords an incredibly powerful way to provision machines with `cloud-init`. It is extensively customizable and is an industry-standard method for complete unattended provisioning of machines.
@@ -80,9 +84,39 @@ With `pve-imds`, you can embed custom user data in the *Notes* field of a VM (in
 
 For me, these capabilites alone were valuable enough to develop `pve-imds`. However, I also wanted a pathway to something like the AWS EC2 [instance identity document](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/instance-identity-documents.html), which provides an external mechanism for **cryptographically verifying instance metadata**. So, if you're using Proxmox tags to specify that a VM is a `mysql` server in the `prod` environment, that VM can *prove it* to another service that trusts a public key.
 
-## Why network-based configuration?
+## JWT-SVID identity tokens
 
-The ISO image approach that Proxmox uses (and that I used before this by generating my own ISO images with my own user data) isn't dynamic. With this approach, metadata is up-to-date immediately. Change a tag? Add user data? Immediately visible in the instance without regenerating the image.
+VMs can use `pve-imds` to issue a short-lived [JWT-SVID](https://spiffe.io/docs/latest/spiffe-specs/jwt-svid/) token. You can use these tokens to authenticate to a service like [Vault](https://developer.hashicorp.com/vault/docs/auth/jwt).
+
+```
+# From inside the VM:
+curl -s -X POST http://169.254.169.254/pve-imds/jwtsvid \
+  -d "audience=https://vault.example.com"
+# eyJhbGciOiJSUzI1NiIsImtpZCI6Ii4uLiIsInR5cCI6IkpXVCJ9...
+```
+
+When decoded, a token contains these claims:
+
+```json
+{
+  "aud": "foo",
+  "exp": 1775087893,
+  "hostname": "test-host",
+  "iat": 1775087593,
+  "jti": "6023722e-2af9-4f92-8a45-1fb98ccf4e11",
+  "meta": {
+    "another-tag": "",
+    "centos-stream-9": "",
+    "pve:node": "test-node",
+    "pve:vmid": "106"
+  },
+  "name": "test-host",
+  "sub": "spiffe://test-node/106",
+  "uuid": "2c8c7c76-a26c-4eb7-b04c-bf52bc095b81"
+}
+```
+
+A relying party can verify the signature of this token using the JWKS endpoint at `http://169.254.169.254/.well-known/jwks.json`. Rather than managing its own signing keys, `pve-imds` uses Proxmox's PKI. Tokens are signed using the node's private key, and the public keys of all nodes in the cluster are made available via the JWKS endpoint.
 
 ## How it works
 
@@ -100,7 +134,6 @@ I have only tested this with VMs running on Proxmox 9 using `virtio` interfaces 
 
 ## Future work
 
-- instance identity documents
 - hardware offload using [ASAP<sup>2</sup> direct](https://docs.nvidia.com/networking/display/mlnxofedv24103250lts/ovs+offload+using+asap%C2%B2+direct)
 
 ## AI disclosure
