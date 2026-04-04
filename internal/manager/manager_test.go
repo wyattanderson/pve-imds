@@ -28,13 +28,18 @@ func startLoop(t *testing.T, m *Manager) context.Context {
 }
 
 // blockingRuntime closes started when Run is entered, then blocks on ctx.
+// If stopped is non-nil it is closed when Run returns.
 type blockingRuntime struct {
 	started chan struct{}
+	stopped chan struct{}
 }
 
 func (r *blockingRuntime) Run(ctx context.Context) error {
 	close(r.started)
 	<-ctx.Done()
+	if r.stopped != nil {
+		close(r.stopped)
+	}
 	return nil
 }
 
@@ -42,8 +47,9 @@ func TestStartStop(t *testing.T) {
 	m := newTestManager(t)
 
 	started := make(chan struct{})
+	stopped := make(chan struct{})
 	m.factory = func(_ int32, _ string) InterfaceRuntime {
-		return &blockingRuntime{started: started}
+		return &blockingRuntime{started: started, stopped: stopped}
 	}
 
 	ctx := startLoop(t, m)
@@ -53,18 +59,10 @@ func TestStartStop(t *testing.T) {
 
 	m.HandleLinkEvent(ctx, tapwatch.Event{Type: tapwatch.Deleted, Name: "tap100i0", Index: 10})
 
-	// Give the event loop time to process the delete.
-	deadline := time.Now().Add(time.Second)
-	for time.Now().Before(deadline) {
-		// Peek at the map via a zero-timeout drain of events.
-		if len(m.active) == 0 {
-			break
-		}
-		time.Sleep(time.Millisecond)
-	}
-
-	if len(m.active) != 0 {
-		t.Fatalf("expected active map to be empty, got %d entries", len(m.active))
+	select {
+	case <-stopped:
+	case <-time.After(time.Second):
+		t.Fatal("runtime was not stopped within timeout")
 	}
 }
 
@@ -72,8 +70,9 @@ func TestDeleteDuringStart(t *testing.T) {
 	m := newTestManager(t)
 
 	started := make(chan struct{})
+	stopped := make(chan struct{})
 	m.factory = func(_ int32, _ string) InterfaceRuntime {
-		return &blockingRuntime{started: started}
+		return &blockingRuntime{started: started, stopped: stopped}
 	}
 
 	ctx := startLoop(t, m)
@@ -84,17 +83,10 @@ func TestDeleteDuringStart(t *testing.T) {
 	// Send delete while runtime is running.
 	m.HandleLinkEvent(ctx, tapwatch.Event{Type: tapwatch.Deleted, Name: "tap100i0", Index: 10})
 
-	// Verify clean exit: map should be empty.
-	deadline := time.Now().Add(time.Second)
-	for time.Now().Before(deadline) {
-		if len(m.active) == 0 {
-			break
-		}
-		time.Sleep(time.Millisecond)
-	}
-
-	if len(m.active) != 0 {
-		t.Fatal("expected active map to be empty after delete during run")
+	select {
+	case <-stopped:
+	case <-time.After(time.Second):
+		t.Fatal("runtime was not stopped within timeout after delete during run")
 	}
 }
 
