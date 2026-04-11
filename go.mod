@@ -17,7 +17,7 @@ require (
 	github.com/systemd/slog-journal v0.1.2
 	go.uber.org/fx v1.24.0
 	golang.org/x/sync v0.20.0
-	golang.org/x/sys v0.42.0
+	golang.org/x/sys v0.43.0
 	gvisor.dev/gvisor v0.0.0-20250709194456-2a7b29d5230c
 )
 
