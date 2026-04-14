@@ -3,7 +3,7 @@ name = "pve-imds-conformance"
 version = "0.1.0"
 requires-python = ">=3.10"
 dependencies = [
-    "pytest>=7.0",
+    "pytest>=9.0.3",
     # cloud-init runtime requirements (cloud-init itself is on PYTHONPATH as a
     # source checkout; we only need its transitive deps installed here).
     "jinja2",
