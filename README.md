@@ -2,7 +2,7 @@
 
 An OpenStack and EC2 IMDS (Instance Metadata Service) compatible metadata service for virtual machines running in Proxmox.
 
-With `pve-imds`, an unmodified Linux [cloud image](https://cloud-images.ubuntu.com/) running [cloud-init](https://docs.cloud-init.io/en/latest/explanation/introduction.html) can reach `http://169.254.169.254` to retrieve not only instance metadata but also **custom [user data](https://docs.cloud-init.io/en/latest/explanation/format/index.html)** stored in the Proxmox VM *Notes* field. Eventually, `pve-imds` will also support a **signed identity document** that a VM can use to authenticate to a service like Vault.
+With `pve-imds`, an unmodified Linux [cloud image](https://cloud-images.ubuntu.com/) running [cloud-init](https://docs.cloud-init.io/en/latest/explanation/introduction.html) can reach `http://169.254.169.254` to retrieve not only instance metadata but also **custom [user data](https://docs.cloud-init.io/en/latest/explanation/format/index.html)** stored in the Proxmox VM *Notes* field. `pve-imds` also supports a **signed identity document** that a VM can use to authenticate to a service like Vault.
 
 ## Quick start
 
