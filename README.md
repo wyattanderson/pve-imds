@@ -1,3 +1,5 @@
+
+
 # pve-imds
 
 An OpenStack and EC2 IMDS (Instance Metadata Service) compatible metadata service for virtual machines running in Proxmox.
@@ -122,7 +124,7 @@ A relying party can verify the signature of this token using the JWKS endpoint a
 
 I think the EC2 IMDS approach (now shared by other hypervisors and clouds) is extremely elegant. A VM can make a request to `http://169.254.169.254` and retrieve information about itself, like looking in a mirror. The VM doesn't even need a valid DHCP lease because `169.254.169.254` is a [link-local IP address](https://en.wikipedia.org/wiki/Link-local_address) and the packets (at least in the case of `pve-imds`) never leave the hypervisor.
 
-This does make the solution slightly more complicated. To provide a strong guarantee that a VM will be able to retrieve its identity *and only its identity*, the hypervisor must be able to intercept and directly respond to packets leaving the VM destined for `169.264.169.254`. Doing this at line rate speeds is challenging. In the cloud, hypervisors (I'm guessing) offload this interception to hardware like [AWS Nitro](https://aws.amazon.com/ec2/nitro/). In the case of `pve-imds`, we use XDP ([eXpress Data Path](https://en.wikipedia.org/wiki/Express_Data_Path)) to intercept packets as soon as they hit the VM's `tap` interface before they hit the rest of the kernel networking stack (or whatever, I'm not an expert). I've been able to maintain full line rate from a VM bridged to a 25GbE network with this approach.
+This does make the solution slightly more complicated. To provide a strong guarantee that a VM will be able to retrieve its identity *and only its identity*, the hypervisor must be able to intercept and directly respond to packets leaving the VM destined for `169.254.169.254`. Doing this at line rate speeds is challenging. In the cloud, hypervisors (I'm guessing) offload this interception to hardware like [AWS Nitro](https://aws.amazon.com/ec2/nitro/). In the case of `pve-imds`, we use XDP ([eXpress Data Path](https://en.wikipedia.org/wiki/Express_Data_Path)) to intercept packets as soon as they hit the VM's `tap` interface before they hit the rest of the kernel networking stack (or whatever, I'm not an expert). I've been able to maintain full line rate from a VM bridged to a 25GbE network with this approach.
 
 XDP intercepts the full Ethernet frame, so we use the [gVisor userspace TCP stack](gvisor.dev/gvisor/pkg/tcpip/stack) to handle the path between the raw `AF_XDP` socket and the VM-specific HTTP handler. An in-memory metadata cache parses Proxmox VM configuration files for updates, refreshing as necessary via [fsnotify](https://github.com/fsnotify/fsnotify).
 
