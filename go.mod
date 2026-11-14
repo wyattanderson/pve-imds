@@ -6,7 +6,7 @@ require (
 	github.com/cilium/ebpf v0.22.0
 	github.com/coreos/go-systemd/v22 v22.7.0
 	github.com/fsnotify/fsnotify v1.10.1
-	github.com/go-jose/go-jose/v4 v4.1.5
+	github.com/go-jose/go-jose/v4 v4.1.9
 	github.com/google/uuid v1.6.0
 	github.com/mdlayher/netlink v1.11.2
 	github.com/prometheus/client_golang v1.25.0
@@ -16,8 +16,8 @@ require (
 	github.com/stretchr/testify v1.12.1
 	github.com/systemd/slog-journal v0.1.2
 	go.uber.org/fx v1.24.0
-	golang.org/x/sync v0.24.0
-	golang.org/x/sys v0.49.0
+	golang.org/x/sync v0.25.0
+	golang.org/x/sys v0.50.0
 	gopkg.in/yaml.v3 v3.0.1
 	gvisor.dev/gvisor v0.0.0-20250709194456-2a7b29d5230c
 )
